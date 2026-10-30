@@ -312,7 +312,11 @@ async function edit(token: string, chatId: number, messageId: number, html: stri
 }
 
 const escape = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
 
 /* ─────────────────────────── handling ─────────────────────────── */
 

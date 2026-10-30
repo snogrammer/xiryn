@@ -399,6 +399,14 @@ export function createVaultTools(env: ToolEnv) {
         if (!item)
           throw new Error("There's no vault item with that id. Check vault_list.")
         const where = await page()
+        // Logins, cards and UPI IDs are bound to a site. When the browser's
+        // site can't be read (Chromium closed, no page open) there is
+        // nothing to bind to, so nothing is typed.
+        if (item.kind !== "identity" && item.kind !== "code" && !where) {
+          throw new Error(
+            "Can't tell which website the browser is on, so nothing was filled. Open the site in Chromium, take a screen_capture, and try again."
+          )
+        }
         if (item.kind === "login" && !hostMatches(where?.host ?? null, item.site)) {
           throw new Error(
             `"${item.label}" is a login for ${item.site}, but the browser is on ${where?.host ?? "no website"}. Logins only fill on their own site.`
@@ -411,7 +419,12 @@ export function createVaultTools(env: ToolEnv) {
               "This payment method can't be used until the person approves the payment. Call request_payment_approval first."
             )
           }
-          if (approval.host && !hostMatches(where?.host ?? null, approval.host)) {
+          if (!approval.host) {
+            throw new Error(
+              "That approval was requested while the browser's site couldn't be read, so it can't be used. Open the checkout in Chromium and call request_payment_approval again."
+            )
+          }
+          if (!hostMatches(where?.host ?? null, approval.host)) {
             throw new Error(
               `The payment was approved on ${approval.host}, but the browser is now on ${where?.host ?? "no website"}. Ask for approval again on this site.`
             )
