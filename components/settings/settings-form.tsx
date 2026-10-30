@@ -811,10 +811,13 @@ function ModelSection({ data }: { data: SettingsData }) {
   const [steps, setSteps] = React.useState(
     data.maxSteps.source === "local" ? (data.maxSteps.value ?? "") : ""
   )
+  const [timeLimit, setTimeLimit] = React.useState(
+    data.turnTimeout.source === "local" ? (data.turnTimeout.value ?? "") : ""
+  )
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border bg-surface/50 p-4">
-      <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+      <div className="grid gap-4 sm:grid-cols-[1fr_140px_140px]">
         <label className="flex flex-col gap-1.5">
           <span className="flex items-center justify-between">
             <span className="label-mono">Default model</span>
@@ -851,13 +854,31 @@ function ModelSection({ data }: { data: SettingsData }) {
             Per turn, before it stops.
           </span>
         </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="flex items-center justify-between">
+            <span className="label-mono">Time limit</span>
+            <SourceBadge setting={data.turnTimeout} />
+          </span>
+          <TextInput
+            value={timeLimit}
+            onChange={setTimeLimit}
+            placeholder={data.turnTimeout.value ?? "30"}
+          />
+          <span className="text-[11.5px] text-muted-foreground">
+            Minutes per turn; 0 for none.
+          </span>
+        </label>
       </div>
       <div>
         <Button
           size="sm"
           disabled={pending}
           onClick={() =>
-            save({ "model.default": model || null, "agent.maxSteps": steps || null })
+            save({
+              "model.default": model || null,
+              "agent.maxSteps": steps || null,
+              "agent.turnTimeout": timeLimit || null,
+            })
           }
         >
           {pending && <Spinner data-icon="inline-start" />}

@@ -35,7 +35,7 @@ import {
   type XirynMessage,
   type ToolEnv,
 } from "@/lib/agent/tools"
-import { getMaxSteps } from "@/lib/config"
+import { getMaxSteps, getTurnTimeoutMinutes } from "@/lib/config"
 import { emit, previewText } from "@/lib/events"
 import { parseModelSpec } from "@/lib/providers/catalog"
 import { callCost, findPrice, toMicros } from "@/lib/providers/pricing"
@@ -59,6 +59,8 @@ type Run = {
   done: boolean
   controller: AbortController
   startedAt: number
+  // Stops the run once it passes the turn time limit
+  deadline?: NodeJS.Timeout
 }
 
 const globalForRuns = globalThis as unknown as { __xirynRuns?: Map<string, Run> }
@@ -109,6 +111,7 @@ function publish(run: Run, chunk: UIMessageChunk) {
 }
 
 function finish(run: Run) {
+  clearTimeout(run.deadline)
   run.done = true
   for (const listener of run.listeners) {
     try {
@@ -323,6 +326,19 @@ ${part.text}`,
       ),
     } as XirynMessage
   })
+}
+
+// How many of a routine's runs (its prompt and everything after) a new run sees
+const ROUTINE_RUNS = 5
+
+// The messages from the nth-last person's message on: the latest n runs
+// of a routine, with anything said in between
+function recentRuns(history: XirynMessage[], n: number) {
+  let seen = 0
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === "user" && ++seen === n) return history.slice(i)
+  }
+  return history
 }
 
 // Desktop actions each return a screenshot. Saving all of them would grow
@@ -590,6 +606,9 @@ export async function startTurn({
     .run()
 
   const history = loadMessages(threadId)
+  // A routine posts every run into the same thread; its later runs only
+  // need the recent ones, or each run would pay for all the runs before it
+  const context = routine ? recentRuns(history, ROUTINE_RUNS) : history
 
   /* Delegation: whoever holds the turn owns the tools and the prompt */
   let current = first
@@ -729,9 +748,27 @@ export async function startTurn({
   let appliedAgentId = first.id
   const maxSteps = getMaxSteps()
 
+  // A hung provider or an endless task would otherwise hold the thread (and
+  // its routine) until someone presses Stop or restarts Xiryn
+  let timedOut: string | null = null
+  const limit = getTurnTimeoutMinutes()
+  if (limit) {
+    run.deadline = setTimeout(() => {
+      if (run.done) return
+      timedOut = `Stopped after ${limit} minute${limit === 1 ? "" : "s"}, the time limit for a turn (Settings → Model).`
+      publish(run, { type: "error", errorText: timedOut })
+      run.controller.abort()
+      // If the stream doesn't wind down after the abort, release the thread
+      setTimeout(() => {
+        if (!run.done) finish(run)
+      }, 60_000).unref()
+    }, limit * 60_000)
+    run.deadline.unref()
+  }
+
   try {
     const initialMessages = await convertToModelMessages(
-      pruneScreens(frameRoutineRuns(history)),
+      pruneScreens(frameRoutineRuns(context)),
       { tools, ignoreIncompleteToolCalls: true }
     )
     const result = streamText({
@@ -828,6 +865,7 @@ export async function startTurn({
       },
       onError: (error) => describeError(error),
       onEnd: ({ responseMessage, isAborted }) => {
+        failure = timedOut ?? failure
         const durationMs = Date.now() - run.startedAt
         const reply = {
           ...responseMessage,
@@ -881,7 +919,8 @@ export async function startTurn({
             "tool-request_secret",
           ].includes(part.type)
         )
-        if (!isAborted && !handedOver) {
+        // A turn stopped by the time limit is news; one you stopped isn't
+        if ((!isAborted || timedOut) && !handedOver) {
           emit({
             type: "turn-finished",
             threadId,
