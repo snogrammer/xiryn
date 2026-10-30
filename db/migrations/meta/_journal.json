@@ -43,6 +43,13 @@
       "when": 1793395015227,
       "tag": "0005_violet_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793404559171,
+      "tag": "0006_hard_blur",
+      "breakpoints": true
     }
   ]
 }

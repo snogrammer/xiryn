@@ -522,6 +522,15 @@ export function sweepVault() {
     .where(eq(vaultItems.ephemeral, true))
     .all()) {
     if (row.createdAt.getTime() < day) deleteVaultItem(row.id)
+    // A card or UPI ID kept "for this task only" goes once no approval can
+    // use it, not a day later
+    else if (
+      (row.kind === "card" || row.kind === "upi") &&
+      row.createdAt.getTime() < Date.now() - PENDING_MS &&
+      !hasLiveApproval(row.id)
+    ) {
+      deleteVaultItem(row.id)
+    }
   }
   sweepApprovalScreens(day)
 }
@@ -530,6 +539,16 @@ export function sweepVault() {
 
 // How long an approved payment can be acted on
 const APPROVAL_MS = 20 * 60_000
+// How long a payment request waits for an answer
+const PENDING_MS = 30 * 60_000
+
+// A request nobody answered in time can no longer be approved
+export function isExpiredRequest(approval: Approval) {
+  return (
+    approval.status === "pending" &&
+    approval.createdAt.getTime() + PENDING_MS < Date.now()
+  )
+}
 
 export type Approval = typeof vaultApprovals.$inferSelect
 
@@ -602,6 +621,11 @@ export function decideApproval(
   const approval = getApproval(id)
   if (!approval) throw new Error("That payment request no longer exists.")
   if (approval.status !== "pending") throw new Error("That payment was already decided.")
+  if (isExpiredRequest(approval)) {
+    throw new Error(
+      "That payment request expired. Ask the agent to request approval again."
+    )
+  }
   if (decision === "approved") {
     const item = itemId ? getVaultItem(itemId) : null
     if (!item || (item.kind !== "card" && item.kind !== "upi")) {
@@ -620,8 +644,10 @@ export function decideApproval(
   return getApproval(id)!
 }
 
-// The approval that lets an agent type this payment method in this thread
-export function activeApproval(threadId: string, itemId: string) {
+// The approval that lets this agent type this payment method in this
+// thread. Bound to the agent that asked, so a squad member it handed the
+// turn to can't pay with it.
+export function activeApproval(threadId: string, itemId: string, agentId: string) {
   return (
     db
       .select()
@@ -630,6 +656,7 @@ export function activeApproval(threadId: string, itemId: string) {
         and(
           eq(vaultApprovals.threadId, threadId),
           eq(vaultApprovals.itemId, itemId),
+          eq(vaultApprovals.agentId, agentId),
           eq(vaultApprovals.status, "approved")
         )
       )
@@ -639,6 +666,23 @@ export function activeApproval(threadId: string, itemId: string) {
         (approval) => approval.expiresAt && approval.expiresAt.getTime() > Date.now()
       ) ?? null
   )
+}
+
+function hasLiveApproval(itemId: string) {
+  return db
+    .select()
+    .from(vaultApprovals)
+    .where(and(eq(vaultApprovals.itemId, itemId), eq(vaultApprovals.status, "approved")))
+    .all()
+    .some((approval) => approval.expiresAt && approval.expiresAt.getTime() > Date.now())
+}
+
+// One approval pays once: each field (number, expiry, cvv…) types once
+export function markApprovalField(id: string, field: string) {
+  const approval = getApproval(id)
+  if (!approval) return
+  const filled = [...new Set([...(approval.filled ?? []), field])]
+  db.update(vaultApprovals).set({ filled }).where(eq(vaultApprovals.id, id)).run()
 }
 
 // Same site, or one of its subdomains

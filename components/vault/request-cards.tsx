@@ -129,9 +129,11 @@ export function PaymentApprovalCard({
             ? "payment declined"
             : payment.status === "taken-over"
               ? "you're paying yourself"
-              : open
-                ? "wants to pay · nothing is paid until you choose"
-                : "payment request"
+              : payment.status === "expired"
+                ? "payment request expired"
+                : open
+                  ? "wants to pay · nothing is paid until you choose"
+                  : "payment request"
       }
       tone={payment.status === "approved" ? "done" : open ? "attention" : "muted"}
     >

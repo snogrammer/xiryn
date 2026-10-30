@@ -253,6 +253,8 @@ export const vaultApprovals = sqliteTable(
     // The site the checkout was on when the agent asked; payment details only
     // fill there
     host: text(),
+    // Payment fields already typed under this approval; each fills once
+    filled: text({ mode: "json" }).$type<string[]>(),
     status: text({ enum: ["pending", "approved", "declined", "taken-over"] })
       .notNull()
       .default("pending"),

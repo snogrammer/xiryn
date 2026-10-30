@@ -20,6 +20,7 @@ import {
   getVaultItem,
   hostMatches,
   listVault,
+  markApprovalField,
   markVaultUsed,
   saveApprovalScreen,
   siteOf,
@@ -382,7 +383,7 @@ export function createVaultTools(env: ToolEnv) {
 
     vault_fill: tool({
       description:
-        "Type a value from the person's vault into a field on your desktop, without you ever seeing it. Click the field first, or pass x and y to have it clicked. A login only fills on its own site; a card or UPI ID only after the person approved the payment with request_payment_approval, and only on the site they approved. The field then shows dots. Returns no screenshot: take one with screen_capture to check the form.",
+        "Type a value from the person's vault into a field on your desktop, without you ever seeing it. Click the field first, or pass x and y to have it clicked. A login only fills on its own site; a card or UPI ID only after the person approved the payment with request_payment_approval, only by you, only on the site they approved, and each detail once per approval. The field then shows dots. Returns no screenshot: take one with screen_capture to check the form.",
       inputSchema: z.object({
         id: z
           .string()
@@ -413,8 +414,9 @@ export function createVaultTools(env: ToolEnv) {
             `"${item.label}" is a login for ${item.site}, but the browser is on ${where?.host ?? "no website"}. Logins only fill on their own site.`
           )
         }
+        let paying: { id: string } | null = null
         if (item.kind === "card" || item.kind === "upi") {
-          const approval = activeApproval(env.threadId, item.id)
+          const approval = activeApproval(env.threadId, item.id, agentId())
           if (!approval) {
             throw new Error(
               "This payment method can't be used until the person approves the payment. Call request_payment_approval first."
@@ -430,6 +432,13 @@ export function createVaultTools(env: ToolEnv) {
               `The payment was approved on ${approval.host}, but the browser is now on ${where?.host ?? "no website"}. Ask for approval again on this site.`
             )
           }
+          // One approval, one payment: each detail types once
+          if (approval.filled?.includes(field)) {
+            throw new Error(
+              `The ${field.replace(/_/g, " ")} was already filled under this approval. An approval covers one payment; to pay again or retry, call request_payment_approval again.`
+            )
+          }
+          paying = approval
         }
         const value = vaultValue(item.id, field)
         if (x !== undefined && y !== undefined) {
@@ -438,6 +447,7 @@ export function createVaultTools(env: ToolEnv) {
         }
         await typeSecret(agentId(), value)
         await maskFocusedField(agentId())
+        if (paying) markApprovalField(paying.id, field)
         markVaultUsed(item.id)
         return {
           filled: field.replace(/_/g, " "),
