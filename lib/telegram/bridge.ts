@@ -14,6 +14,7 @@ import {
 } from "@/lib/agent/runtime"
 import type { XirynMessage, SecretRequest } from "@/lib/agent/tools"
 import { getSetting, setSetting } from "@/lib/config"
+import { screenOf } from "@/lib/screens"
 import {
   approvalScreen,
   getApproval,
@@ -811,11 +812,11 @@ async function converse(
       if (
         part.type === "tool-screen_share" &&
         part.state === "output-available" &&
-        part.output.image
+        screenOf(part.output)
       ) {
         await flushText()
         await sendPhoto(token, chatId, {
-          base64: part.output.image,
+          base64: screenOf(part.output)!,
           mediaType: part.output.mediaType,
         }).catch((error) => console.error("[xiryn] telegram: sendPhoto failed:", error))
         sentSomething = true

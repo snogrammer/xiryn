@@ -18,6 +18,19 @@ export async function register() {
   shared.__xirynVaultSweep ??= setInterval(sweepVault, 60 * 60_000)
   shared.__xirynVaultSweep.unref()
 
+  // Screenshots live on disk: move any still inside messages, and drop those
+  // of deleted threads or past their retention
+  const { migrateInlineScreens, sweepScreens } = await import("./lib/screens")
+  try {
+    migrateInlineScreens()
+  } catch (error) {
+    console.error("[xiryn] moving screenshots to disk:", error)
+  }
+  sweepScreens()
+  const screens = globalThis as { __xirynScreenSweep?: NodeJS.Timeout }
+  screens.__xirynScreenSweep ??= setInterval(sweepScreens, 60 * 60_000)
+  screens.__xirynScreenSweep.unref()
+
   // Resume the Telegram bridge if a bot token is configured
   const { syncTelegram } = await import("./lib/telegram/bridge")
   syncTelegram()
