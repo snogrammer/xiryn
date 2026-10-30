@@ -489,16 +489,27 @@ export async function maskFocusedField(agentId: string) {
   await execIn(agentId, ["xiryn-mask"], { timeoutMs: 15_000 }).catch(() => null)
 }
 
-// The page in front of the person: the browser tab whose title is in the
-// focused window, read from Chromium's debugging port inside the container
+// The page in front of the person: the one browser tab whose title is in
+// the focused Chromium window, read from Chromium's debugging port inside the
+// container. Anything less certain (another window focused, no tab or several
+// tabs with that title) is null, so nothing site-bound gets filled. This stops
+// a focused terminal or a decoy window; it can't stop an agent that uses root
+// in its own container to forge what these commands report.
 export async function currentPage(agentId: string) {
   const [targets, focused] = await Promise.all([
     execIn(agentId, ["curl", "-s", "-m", "4", "http://127.0.0.1:9222/json/list"], {
       timeoutMs: 15_000,
     }),
-    execIn(agentId, ["xdotool", "getactivewindow", "getwindowname"], {
-      timeoutMs: 15_000,
-    }),
+    // First line: the focused window's WM_CLASS; the rest: its title
+    execIn(
+      agentId,
+      [
+        "sh",
+        "-c",
+        'w=$(xdotool getactivewindow) && xprop -id "$w" WM_CLASS && xdotool getwindowname "$w"',
+      ],
+      { timeoutMs: 15_000 }
+    ),
   ])
   let pages: { type: string; url: string; title: string }[] = []
   try {
@@ -508,12 +519,15 @@ export async function currentPage(agentId: string) {
   } catch {
     return null
   }
-  const title = focused.stdout
-    .toString()
+  const [windowClass = "", ...name] = focused.stdout.toString().trim().split("\n")
+  if (!/chromium/i.test(windowClass)) return null
+  const title = name
+    .join("\n")
     .trim()
     .replace(/ - Chromium$/, "")
-  const page = pages.find((candidate) => candidate.title === title) ?? pages[0]
-  if (!page) return null
+  const matches = pages.filter((candidate) => candidate.title === title)
+  if (matches.length !== 1) return null
+  const page = matches[0]
   return {
     url: page.url,
     host: new URL(page.url).hostname.replace(/^www\./, ""),

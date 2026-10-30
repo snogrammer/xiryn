@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import {
   addVaultItem,
+  approvalScreen,
   deleteVaultItem,
   getApproval,
   getVaultItem,
@@ -62,6 +63,8 @@ export async function paymentRequest(approvalId: string) {
     purpose: approval.purpose,
     host: approval.host,
     status: approval.status,
+    // Only while it's waiting for an answer: that's when it's checked
+    screen: approval.status === "pending" ? approvalScreen(approval.id) : null,
     item: approval.itemId ? getVaultItem(approval.itemId) : null,
     methods: listVault({ temporary: true }).filter(
       (item) => item.kind === "card" || item.kind === "upi"

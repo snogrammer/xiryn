@@ -148,6 +148,20 @@ export function PaymentApprovalCard({
         </p>
       )}
 
+      {open && payment.screen && (
+        <figure className="flex flex-col gap-1.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`data:image/jpeg;base64,${payment.screen}`}
+            alt="The agent's screen when it asked to pay"
+            className="w-full max-w-md rounded-md border bg-black"
+          />
+          <figcaption className="label-mono text-muted-foreground">
+            its screen when it asked · check this is the checkout you expect
+          </figcaption>
+        </figure>
+      )}
+
       {payment.status === "approved" && payment.item && (
         <p className="flex items-center gap-1.5 font-mono text-[12px]">
           <ShieldCheckIcon className="size-3.5 text-ok" />
