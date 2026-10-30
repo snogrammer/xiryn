@@ -17,6 +17,18 @@ export class DockerError extends Error {
   }
 }
 
+// A command printed more than the caller allowed, and was killed. Output
+// from an agent's machine is the agent's to shape, so it is never trusted
+// to be small.
+export class OutputLimitError extends Error {
+  name = "OutputLimitError"
+  constructor(limit: number) {
+    const size =
+      limit >= 1_000_000 ? `${limit / 1_000_000} MB` : `${Math.round(limit / 1000)} KB`
+    super(`The command printed more than ${size} and was stopped.`)
+  }
+}
+
 export class DockerMissingError extends Error {
   name = "DockerMissingError"
   constructor() {
@@ -55,6 +67,9 @@ export type RunOptions = {
   // Called with each line of output as it arrives (builds)
   onLine?: (line: string) => void
   env?: Record<string, string>
+  // Stdout and stderr together; past it the command is killed and the call
+  // rejects with OutputLimitError
+  maxBytes?: number
 }
 
 const globalForDocker = globalThis as unknown as {
@@ -80,6 +95,19 @@ function spawnOnce(binary: string, args: string[], options: RunOptions) {
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
+    let size = 0
+    let overflow = false
+    // Counts what arrives; once over the limit, stops keeping it
+    const keep = (chunk: Buffer) => {
+      if (overflow) return false
+      size += chunk.length
+      if (options.maxBytes && size > options.maxBytes) {
+        overflow = true
+        child.kill("SIGKILL")
+        return false
+      }
+      return true
+    }
     let pending = ""
     const lines = (chunk: Buffer) => {
       if (!options.onLine) return
@@ -89,10 +117,12 @@ function spawnOnce(binary: string, args: string[], options: RunOptions) {
       for (const line of parts) if (line.trim()) options.onLine(line)
     }
     child.stdout.on("data", (chunk: Buffer) => {
+      if (!keep(chunk)) return
       stdout.push(chunk)
       lines(chunk)
     })
     child.stderr.on("data", (chunk: Buffer) => {
+      if (!keep(chunk)) return
       stderr.push(chunk)
       lines(chunk)
     })
@@ -106,6 +136,7 @@ function spawnOnce(binary: string, args: string[], options: RunOptions) {
     })
     child.on("close", (exitCode, signal) => {
       if (timer) clearTimeout(timer)
+      if (overflow) return reject(new OutputLimitError(options.maxBytes!))
       if (pending.trim()) options.onLine?.(pending)
       resolve({
         exitCode: signal ? null : exitCode,

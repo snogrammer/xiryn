@@ -256,6 +256,11 @@ export const ensureDesktop = ensureWorkstation
 
 const GONE = /is not running|no such container|is restarting/i
 
+// The most a command in a workstation may print before it's stopped. The
+// scripts there clip their own output (xiryn-run to 20 KB, readFile to 1 MB),
+// but the agent can rewrite them, so the server doesn't rely on that.
+const EXEC_MAX_BYTES = 2_000_000
+
 // Runs a command in the agent's machine as its user. If the machine stopped
 // since it was last seen, it is started again and the command retried once.
 async function execIn(
@@ -267,6 +272,8 @@ async function execIn(
     ...(options.input !== undefined ? ["--interactive"] : []),
     ...(options.cwd ? ["--workdir", options.cwd] : []),
   ]
+  // Everything read back from the agent's machine is capped (see OutputLimitError)
+  options = { maxBytes: EXEC_MAX_BYTES, ...options }
   let name = await ensureWorkstation(agentId)
   let result = await dockerRaw(["exec", ...flags, name, ...command], options)
   if (result.exitCode !== 0 && GONE.test(result.stderr)) {
@@ -353,16 +360,20 @@ export async function writeFile(agentId: string, path: string, content: Buffer) 
 }
 
 export async function listDirectory(agentId: string, path: string) {
-  const result = await execOrThrow(agentId, [
-    "find",
-    resolvePath(path),
-    "-mindepth",
-    "1",
-    "-maxdepth",
-    "1",
-    "-printf",
-    "%y\\t%s\\t%f\\n",
-  ])
+  const result = await execOrThrow(
+    agentId,
+    [
+      "find",
+      resolvePath(path),
+      "-mindepth",
+      "1",
+      "-maxdepth",
+      "1",
+      "-printf",
+      "%y\\t%s\\t%f\\n",
+    ],
+    { maxBytes: 512_000 }
+  )
   return result.stdout
     .toString("utf8")
     .split("\n")
@@ -499,6 +510,7 @@ export async function currentPage(agentId: string) {
   const [targets, focused] = await Promise.all([
     execIn(agentId, ["curl", "-s", "-m", "4", "http://127.0.0.1:9222/json/list"], {
       timeoutMs: 15_000,
+      maxBytes: 256_000,
     }),
     // First line: the focused window's WM_CLASS; the rest: its title
     execIn(
@@ -508,7 +520,7 @@ export async function currentPage(agentId: string) {
         "-c",
         'w=$(xdotool getactivewindow) && xprop -id "$w" WM_CLASS && xdotool getwindowname "$w"',
       ],
-      { timeoutMs: 15_000 }
+      { timeoutMs: 15_000, maxBytes: 4_000 }
     ),
   ])
   let pages: { type: string; url: string; title: string }[] = []
@@ -634,6 +646,7 @@ export async function getTakeoverLink(
   const { password } = await getDesktopAccess(agentId)
   const result = await execOrThrow(agentId, ["xiryn-tunnel", String(minutes)], {
     timeoutMs: 45_000,
+    maxBytes: 4_000,
   })
   // The address is read from the agent's own machine, so it is checked to be
   // a quick-tunnel address before the person is sent there with the password
