@@ -86,6 +86,17 @@ XIRYN_ALLOWED_HOSTS=xiryn.home.example
 WebSocket upgrades allowed. Over Tailscale, use the machine's MagicDNS name (or
 Tailscale IP) as the allowed host and `XIRYN_BIND` to its Tailscale IP.
 
+**Sign in.** Xiryn also requires a per-install access key on every request. On
+start it logs a sign-in link built from `XIRYN_URL`:
+
+```
+[xiryn] sign in: https://xiryn.home.example/?key=…
+```
+
+Open it once on each browser or phone you use (`docker logs xiryn | grep 'sign in'`
+finds it again). The key lives in the data volume as `access.key`; delete it
+and restart the stack to sign every device out.
+
 ## Known limitation · the live desktop on another machine
 
 Agents work fine from anywhere — they drive their workstation through Docker on

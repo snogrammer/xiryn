@@ -30,6 +30,7 @@ const dataDir = path.resolve(root, process.env.XIRYN_DATA_DIR || "data")
 const pidFile = path.join(dataDir, "background.pid")
 const logFile = path.join(dataDir, "xiryn.log")
 const builtFile = path.join(dataDir, "background-build.json")
+const keyFile = path.join(dataDir, "access.key")
 const URL = "http://127.0.0.1:6796"
 const next = path.join(root, "node_modules", "next", "dist", "bin", "next")
 
@@ -111,12 +112,21 @@ function build() {
   writeFileSync(builtFile, JSON.stringify(source()))
 }
 
+// The link that signs a browser in (the server makes the key on first start)
+function signIn() {
+  try {
+    const key = readFileSync(keyFile, "utf8").trim()
+    if (key) console.log(dim(`  sign in: ${URL}/?key=${key}`))
+  } catch {}
+}
+
 /* ──────────────────────────── commands ─────────────────────────── */
 
 async function start() {
   const pid = readPid()
   if ((pid && alive(pid)) || (await answering())) {
     console.log(ok(`Xiryn is already running at ${bold(URL)}`))
+    signIn()
     return
   }
   if (needsBuild()) build()
@@ -141,6 +151,7 @@ async function start() {
   while (Date.now() < deadline) {
     if (await answering()) {
       console.log(ok(`Xiryn is running in the background at ${bold(URL)}`))
+      signIn()
       console.log(
         dim(
           `  Close this terminal any time. Stop it with: npm run background -- stop\n  Log: ${logFile}`
@@ -220,6 +231,7 @@ async function status() {
     console.log(ok(`running at ${bold(URL)} ${dim("(not in the background)")}`))
   else if (background) console.log(warn(`starting… ${dim(`(log: ${logFile})`)}`))
   else console.log(dim("  not running"))
+  if (up) signIn()
   const login = loginEntry()
   console.log(dim(`  starts at login: ${login && existsSync(login.file) ? "yes" : "no"}`))
 }

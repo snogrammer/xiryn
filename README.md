@@ -418,6 +418,7 @@ Every setting can come from `.env` **or** from **Settings** in the app. Values s
 Xiryn has no user accounts, so it's built never to be reachable by anyone but you:
 
 - Binds to **127.0.0.1** only, and refuses any request whose `Host` or `Origin` isn't loopback — which also blocks DNS-rebinding attacks from web pages you visit.
+- Every request also needs a per-install access key, so neither your agents' workstations nor anything else that can reach the port can drive Xiryn. When Xiryn starts it prints a sign-in link (`http://127.0.0.1:6796/?key=…`). Open it once per browser; `npm run link` prints it again. Delete `data/access.key` and restart to sign every browser out.
 - API keys never reach the browser; the UI only sees masked values, and keys are kept out of logs.
 - Telegram answers exactly **one** paired account; pairing codes are single-use and rotate after wrong guesses.
 - Agents execute only inside their own containers — never on your desktop or in your files. Their browsers have password saving and card autofill switched off.

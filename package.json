@@ -50,6 +50,7 @@
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 6796",
     "background": "node scripts/background.mjs",
+    "link": "node scripts/link.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",

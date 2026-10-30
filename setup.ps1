@@ -120,14 +120,26 @@ if ($LASTEXITCODE -ne 0 -and $dockerFresh) {
 Write-Host ""
 if (-not $NoStart -and (Ask "Start Xiryn now?")) {
   $url = "http://127.0.0.1:6796"
+  $dataDir = if ($env:XIRYN_DATA_DIR) { $env:XIRYN_DATA_DIR } else { "data" }
+  $keyFile = Join-Path (Get-Location).Path (Join-Path $dataDir "access.key")
+  # Any answer means it's up (it answers 401 until a browser signs in); then
+  # open the sign-in link, which carries the access key it made on first start
   Start-Job -ScriptBlock {
-    param($url)
+    param($url, $keyFile)
     for ($i = 0; $i -lt 120; $i++) {
-      try { Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 | Out-Null; Start-Process $url; return } catch { Start-Sleep 1 }
+      $up = $false
+      try { Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 | Out-Null; $up = $true } catch { if ($_.Exception.Response) { $up = $true } }
+      if ($up -and (Test-Path $keyFile)) {
+        $key = (Get-Content -Raw $keyFile).Trim()
+        Start-Process "$url/?key=$key"
+        return
+      }
+      Start-Sleep 1
     }
-  } -ArgumentList $url | Out-Null
+  } -ArgumentList $url, $keyFile | Out-Null
   Write-Host "  Xiryn is starting at $url - press Ctrl+C to stop it."
   Write-Host "  Next time, start it with: cd $((Get-Location).Path); npm run dev"
+  Write-Host "  To sign in another browser, run: npm run link"
   Write-Host ""
   npm run dev
 } else {
