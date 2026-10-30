@@ -45,7 +45,7 @@ Understanding what Xiryn protects — and what it doesn't — helps you judge a 
 - **Third-party services.** Prompts go to the model provider you configure; Telegram messages pass through Telegram; phone take-over links pass through Cloudflare. Their security is governed by those providers.
 - **What the vault can't do.** A value typed into a page is in that page, and the agent controls the browser it's in. What the vault guarantees is that values never enter the model's context or Xiryn's records, and that their use is deliberate and approved. It doesn't make a compromised agent harmless. The site check and the approval screenshot are both measured inside the agent's own workstation, where the agent has root. A prompt-injected agent could forge them, or read a typed value back from the page through Chromium's debugging port. Treat the screenshot as a guide for your judgement, not proof, and approve payments you recognise.
 - **Container isolation itself.** Workstations rely on Docker's isolation. A container escape is a Docker issue — report it to Docker — unless Xiryn's configuration (mounts, capabilities, published ports) made it possible.
-- **Local data at rest.** `data/xiryn.db`, `.env` and the agents' home-folder volumes are protected by your operating system's account security.
+- **Local data at rest.** `data/xiryn.db`, the screenshots in `data/screens/`, `.env` and the agents' home-folder volumes are protected by your operating system's account security.
 
 ## Hardening tips
 

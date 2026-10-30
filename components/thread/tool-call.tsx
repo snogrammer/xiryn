@@ -146,20 +146,33 @@ function Pre({ children, className }: { children: React.ReactNode; className?: s
   )
 }
 
+// Live screenshots arrive inline; saved ones are files (lib/screens.ts),
+// which may have expired
 function Screenshot({
-  image,
-  mediaType,
+  output,
   alt,
+  missing = "Screenshot not kept.",
 }: {
-  image: string
-  mediaType: string
+  output: { image?: unknown; screen?: unknown; mediaType?: unknown }
   alt: string
+  missing?: string
 }) {
+  const [failed, setFailed] = React.useState(false)
+  const src = output.image
+    ? `data:${str(output.mediaType) || "image/jpeg"};base64,${str(output.image)}`
+    : output.screen
+      ? `/api/screens/${str(output.screen)}`
+      : null
+  if (!src || failed) {
+    return <p className="text-[12px] text-muted-foreground">{missing}</p>
+  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`data:${mediaType};base64,${image}`}
+      src={src}
       alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
       className="w-full max-w-xl rounded-md border bg-black"
     />
   )
@@ -227,15 +240,7 @@ function Details({ part }: { part: ToolPart }) {
       ) : null
     case "screen_capture":
     case "screen_share":
-      return output?.image ? (
-        <Screenshot
-          image={str(output.image)}
-          mediaType={str(output.mediaType) || "image/jpeg"}
-          alt="Workstation screen"
-        />
-      ) : (
-        <p className="text-[12px] text-muted-foreground">Screenshot not kept.</p>
-      )
+      return <Screenshot output={output ?? {}} alt="Workstation screen" />
     case "pointer_click":
     case "pointer_move":
     case "pointer_drag":
@@ -245,17 +250,11 @@ function Details({ part }: { part: ToolPart }) {
       return (
         <div className="flex flex-col gap-2">
           {name === "key_type" && <Pre>{str(input.text)}</Pre>}
-          {output?.image ? (
-            <Screenshot
-              image={str(output.image)}
-              mediaType={str(output.mediaType) || "image/jpeg"}
-              alt="The screen just after this action"
-            />
-          ) : (
-            <p className="text-[12px] text-muted-foreground">
-              Screenshot after this step not kept.
-            </p>
-          )}
+          <Screenshot
+            output={output ?? {}}
+            alt="The screen just after this action"
+            missing="Screenshot after this step not kept."
+          />
         </div>
       )
     case "web_search":
@@ -415,16 +414,14 @@ export function ToolCall({
 
   // A shared screen is meant to be seen, so it is shown open
   if (name === "screen_share" && part.state === "output-available") {
-    const output = part.output as { image: string | null; mediaType: string }
+    const output = part.output as {
+      image: string | null
+      screen?: string | null
+      mediaType: string
+    }
     return (
       <figure className="flex flex-col gap-1.5">
-        {output.image && (
-          <Screenshot
-            image={output.image}
-            mediaType={output.mediaType}
-            alt="Shared screen"
-          />
-        )}
+        <Screenshot output={output} alt="Shared screen" />
         <figcaption className="font-mono text-[10.5px] text-muted-foreground">
           shared screen
         </figcaption>

@@ -36,6 +36,7 @@ import {
   type ToolEnv,
 } from "@/lib/agent/tools"
 import { getMaxSteps, getTurnTimeoutMinutes } from "@/lib/config"
+import { externalizeScreens, screenOf } from "@/lib/screens"
 import { emit, previewText } from "@/lib/events"
 import { parseModelSpec } from "@/lib/providers/catalog"
 import { callCost, findPrice, toMicros } from "@/lib/providers/pricing"
@@ -174,6 +175,8 @@ export function loadMessages(threadId: string) {
 }
 
 function saveMessage(threadId: string, message: XirynMessage, createdAt = new Date()) {
+  // Screenshots go to disk; the message keeps a reference (lib/screens.ts)
+  message = externalizeScreens(threadId, message)
   db.insert(messages)
     .values({
       id: message.id,
@@ -266,24 +269,31 @@ const SCREENS_IN_CONTEXT = 2
 
 type Part = XirynMessage["parts"][number]
 
-// Tool results that carry a screenshot: looks, and every desktop action
-function hasScreen(part: Part): part is Part & { output: { image: string | null } } {
+// Tool results that carry a screenshot: looks, and every desktop action.
+// Saved ones hold a reference to a file instead of the image itself.
+function hasScreen(
+  part: Part
+): part is Part & { output: { image: string | null; screen?: string | null } } {
   if (!part.type.startsWith("tool-") || !("state" in part)) return false
   if (part.state !== "output-available") return false
   const output = (part as { output?: unknown }).output
   return typeof output === "object" && output !== null && "image" in output
 }
 
-// Keeps the image of the newest `keep` screenshots, newest first
+// Keeps the image of the newest `keep` screenshots, newest first, reading
+// saved ones back from disk
 function keepNewestScreens(parts: Part[], keep: number, counter = { kept: 0 }) {
   return parts
     .slice()
     .reverse()
     .map((part) => {
-      if (!hasScreen(part) || !part.output.image) return part
+      if (!hasScreen(part) || !(part.output.image || part.output.screen)) return part
       if (counter.kept < keep) {
-        counter.kept++
-        return part
+        const image = screenOf(part.output)
+        if (image) {
+          counter.kept++
+          return { ...part, output: { ...part.output, image } } as Part
+        }
       }
       return { ...part, output: { ...part.output, image: null } } as Part
     })

@@ -37,6 +37,10 @@ const integrationSettings = {
   // "off" leaves the phone link out of Telegram hand-off notices
   "workstation.phoneLinks": { env: "XIRYN_PHONE_TAKEOVER", fallback: "on" },
   "workstation.installId": { env: null, internal: true },
+  // Days a screenshot is kept on disk; 0 keeps them as long as their thread
+  "screens.retentionDays": { env: "XIRYN_SCREENSHOT_DAYS", fallback: "30" },
+  // When screenshots saved inside messages were moved to disk
+  "screens.migrated": { env: null, internal: true },
   // "off" stops the update check and star count (the only request Xiryn makes
   // on its own, to GitHub's public API)
   "updates.check": { env: "XIRYN_UPDATE_CHECK", fallback: "on" },
