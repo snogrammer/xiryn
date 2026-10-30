@@ -11,6 +11,25 @@ function reason(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+// Base URLs receive stored API keys and the bot token with every request, so
+// they must at least be real http(s) addresses without embedded credentials.
+// Private and loopback addresses stay allowed: Ollama and self-hosted
+// Firecrawl live there.
+function validUrlSetting(value: string) {
+  let url: URL
+  try {
+    url = new URL(value.trim())
+  } catch {
+    return false
+  }
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    url.hostname !== "" &&
+    url.username === "" &&
+    url.password === ""
+  )
+}
+
 // Values are only ever written here and read on the server; the browser
 // only ever sees masked versions of secrets
 export async function saveSettings(values: Record<string, string | null>) {
@@ -55,6 +74,11 @@ export async function saveSettings(values: Record<string, string | null>) {
     }
     if (key === "agent.maxSteps" && value && !/^\d{1,3}$/.test(value.trim())) {
       throw new Error("Max steps must be a whole number.")
+    }
+    if (/\.(baseUrl|apiUrl)$/.test(key) && value && !validUrlSetting(value)) {
+      throw new Error(
+        "That must be an http:// or https:// address, e.g. http://127.0.0.1:11434, without a username or password."
+      )
     }
     setSetting(key, value)
   }
