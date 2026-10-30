@@ -8,6 +8,7 @@ import {
   deleteVaultItem,
   getApproval,
   getVaultItem,
+  isExpiredRequest,
   listVault,
   vaultKeySource,
   type VaultKind,
@@ -62,9 +63,12 @@ export async function paymentRequest(approvalId: string) {
     amount: approval.amount,
     purpose: approval.purpose,
     host: approval.host,
-    status: approval.status,
+    status: isExpiredRequest(approval) ? ("expired" as const) : approval.status,
     // Only while it's waiting for an answer: that's when it's checked
-    screen: approval.status === "pending" ? approvalScreen(approval.id) : null,
+    screen:
+      approval.status === "pending" && !isExpiredRequest(approval)
+        ? approvalScreen(approval.id)
+        : null,
     item: approval.itemId ? getVaultItem(approval.itemId) : null,
     methods: listVault({ temporary: true }).filter(
       (item) => item.kind === "card" || item.kind === "upi"

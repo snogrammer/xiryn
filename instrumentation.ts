@@ -11,11 +11,12 @@ export async function register() {
   const { connect } = await import("./db")
   connect()
 
-  // One-time vault entries (codes, a card used once) don't outlive a day
+  // One-time vault entries (codes, a card for one payment) are cleared once
+  // they can't be used
   const { sweepVault } = await import("./lib/vault")
   sweepVault()
   const shared = globalThis as { __xirynVaultSweep?: NodeJS.Timeout }
-  shared.__xirynVaultSweep ??= setInterval(sweepVault, 60 * 60_000)
+  shared.__xirynVaultSweep ??= setInterval(sweepVault, 10 * 60_000)
   shared.__xirynVaultSweep.unref()
 
   // Screenshots live on disk: move any still inside messages, and drop those

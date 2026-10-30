@@ -1,0 +1,1 @@
+ALTER TABLE `vault_approvals` ADD `filled` text;
