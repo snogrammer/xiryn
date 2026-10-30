@@ -297,6 +297,8 @@ async function say(
         last = await callTelegram<TgMessage>(token, "sendMessage", {
           chat_id: chatId,
           text: plainText(chunk).slice(0, 4096),
+          // A preview is a request Telegram makes to the URL, unasked
+          link_preview_options: { is_disabled: true },
           ...extra,
         })
       } else {
@@ -728,6 +730,7 @@ async function converse(
         chat_id: chatId,
         text: renderSteps(),
         parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
         disable_notification: true,
       }).catch(() => null)
     } else {
