@@ -2,6 +2,11 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return
 
+  // The access key every browser needs (made on first run), and the link
+  // that hands it over
+  const { signInUrl } = await import("./lib/access")
+  console.log(`[xiryn] sign in: ${signInUrl()}`)
+
   // Open the database (and apply pending migrations) before the first request
   const { connect } = await import("./db")
   connect()
