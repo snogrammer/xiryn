@@ -523,6 +523,7 @@ export function sweepVault() {
     .all()) {
     if (row.createdAt.getTime() < day) deleteVaultItem(row.id)
   }
+  sweepApprovalScreens(day)
 }
 
 /* ─────────────────────────── approvals ──────────────────────────── */
@@ -553,6 +554,40 @@ export function createApproval(input: {
     .returning()
     .all()
   return row
+}
+
+// What the agent's screen showed when it asked to pay, for the person to
+// check it's the checkout they expect. Kept as a file beside the database,
+// not in it, and only until the request is a day old.
+const SCREENS_DIR = path.join(DATA_DIR, "approvals")
+const screenFile = (id: string) => path.join(SCREENS_DIR, `${path.basename(id)}.jpg`)
+
+export function saveApprovalScreen(id: string, base64: string) {
+  fs.mkdirSync(SCREENS_DIR, { recursive: true })
+  fs.writeFileSync(screenFile(id), Buffer.from(base64, "base64"), { mode: 0o600 })
+}
+
+export function approvalScreen(id: string) {
+  try {
+    return fs.readFileSync(screenFile(id)).toString("base64")
+  } catch {
+    return null
+  }
+}
+
+function sweepApprovalScreens(before: number) {
+  let files: string[] = []
+  try {
+    files = fs.readdirSync(SCREENS_DIR)
+  } catch {
+    return
+  }
+  for (const file of files) {
+    const approval = getApproval(file.replace(/\.jpg$/, ""))
+    if (!approval || approval.createdAt.getTime() < before) {
+      fs.rmSync(path.join(SCREENS_DIR, file), { force: true })
+    }
+  }
 }
 
 export function getApproval(id: string) {

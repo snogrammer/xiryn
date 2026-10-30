@@ -21,6 +21,7 @@ import {
   hostMatches,
   listVault,
   markVaultUsed,
+  saveApprovalScreen,
   siteOf,
   VAULT_FIELDS,
   vaultValue,
@@ -404,7 +405,7 @@ export function createVaultTools(env: ToolEnv) {
         // nothing to bind to, so nothing is typed.
         if (item.kind !== "identity" && item.kind !== "code" && !where) {
           throw new Error(
-            "Can't tell which website the browser is on, so nothing was filled. Open the site in Chromium, take a screen_capture, and try again."
+            "Can't tell which website the browser is on, so nothing was filled. Bring the site's Chromium window to the front (one tab with that title), take a screen_capture, and try again."
           )
         }
         if (item.kind === "login" && !hostMatches(where?.host ?? null, item.site)) {
@@ -448,7 +449,7 @@ export function createVaultTools(env: ToolEnv) {
 
     request_payment_approval: tool({
       description:
-        "Ask the person to approve a payment before you pay for anything. Call it on the checkout page once the final amount is known. They see the merchant, the amount and the site, and choose: approve with a saved card or UPI ID (you then fill it with vault_fill), take over and pay themselves, or decline. Your turn ends with this call; their decision arrives as a message.",
+        "Ask the person to approve a payment before you pay for anything. Call it on the checkout page once the final amount is known. They see the merchant, the amount, the site and a screenshot of your screen, so keep the checkout in front. They choose: approve with a saved card or UPI ID (you then fill it with vault_fill), take over and pay themselves, or decline. Your turn ends with this call; their decision arrives as a message.",
       inputSchema: z.object({
         merchant: z.string().min(1).describe("Who is being paid, e.g. MakeMyTrip"),
         amount: z
@@ -467,6 +468,10 @@ export function createVaultTools(env: ToolEnv) {
           purpose,
           host: where?.host ?? null,
         })
+        // The person checks this before approving; it isn't returned to you
+        await captureScreen(agentId())
+          .then((shot) => saveApprovalScreen(approval.id, shot.image))
+          .catch((error) => console.error("[xiryn] payment screenshot:", error))
         const methods = listVault({ temporary: true }).filter(
           (item) => item.kind === "card" || item.kind === "upi"
         )

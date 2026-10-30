@@ -14,7 +14,12 @@ import {
 } from "@/lib/agent/runtime"
 import type { XirynMessage, SecretRequest } from "@/lib/agent/tools"
 import { getSetting, setSetting } from "@/lib/config"
-import { getApproval, type Approval, type VaultItemView } from "@/lib/vault"
+import {
+  approvalScreen,
+  getApproval,
+  type Approval,
+  type VaultItemView,
+} from "@/lib/vault"
 import { answerPayment, answerSecret, type VaultMarker } from "@/lib/vault-requests"
 import { getTakeoverLink } from "@/lib/workstation"
 import { resolveModelSpec } from "@/lib/providers/registry"
@@ -1009,6 +1014,17 @@ export async function notifyPayment({
       { text: "✕ Decline", callback_data: `pay:${approval.id}:decline` },
     ],
   ]
+
+  // What its screen showed, so the person can check it's the right checkout
+  const screen = approvalScreen(approval.id)
+  if (screen) {
+    await sendPhoto(
+      token,
+      owner,
+      { base64: screen, mediaType: "image/jpeg" },
+      `${agent.name}'s screen at checkout`
+    ).catch((error) => console.error("[xiryn] telegram: sendPhoto failed:", error))
+  }
 
   const sent = await callTelegram<TgMessage>(token, "sendMessage", {
     chat_id: owner,
