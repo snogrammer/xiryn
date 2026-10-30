@@ -123,4 +123,4 @@ Everything lives in `data/xiryn.db` (override with `XIRYN_DATA_DIR`). Schema: `d
 
 ## Security boundary
 
-`proxy.ts` runs before every request and refuses any `Host` or `Origin` that isn't loopback (or in `XIRYN_ALLOWED_HOSTS`). Together with binding to `127.0.0.1`, this keeps an account-less app private and blocks DNS rebinding. See [SECURITY.md](../SECURITY.md).
+`proxy.ts` runs before every request and refuses any `Host` that isn't loopback (or in `XIRYN_ALLOWED_HOSTS`), and any `Origin` that doesn't match the `Host`. Together with binding to `127.0.0.1`, this keeps an account-less app private from browsers and blocks DNS rebinding; it is not authentication, and a client that sets its own headers is not stopped by it. See [SECURITY.md](../SECURITY.md) and the [October 2026 audit](security-audit-2026-10.md) for what that means in practice.
