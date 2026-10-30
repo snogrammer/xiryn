@@ -46,6 +46,12 @@ export async function POST(
   ctx: { params: Promise<{ threadId: string }> }
 ) {
   const { threadId } = await ctx.params
+  // Browsers send simple (no-preflight) cross-origin posts as text/plain;
+  // only the app's own JSON requests are accepted
+  const contentType = request.headers.get("content-type") ?? ""
+  if (!/^application\/json\b/i.test(contentType)) {
+    return fail("Expected application/json.", 415)
+  }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return fail("Malformed message.")
 

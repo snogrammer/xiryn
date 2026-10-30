@@ -31,13 +31,20 @@ export function proxy(request: NextRequest) {
     })
   }
 
+  // A page on another port of this machine (another dev server, a stray
+  // local app) is a different origin too, so Origin has to match Host
+  // exactly, port included, not just land on the allow-list.
   const origin = request.headers.get("origin")
   if (origin && request.method !== "GET" && request.method !== "HEAD") {
     let originHost: string | null = null
     try {
-      originHost = new URL(origin).host
+      originHost = new URL(origin).host.toLowerCase()
     } catch {}
-    if (!originHost || !allowed.has(hostname(originHost))) {
+    if (
+      !originHost ||
+      !allowed.has(hostname(originHost)) ||
+      originHost !== host.toLowerCase()
+    ) {
       return new NextResponse("Cross-origin request refused.", { status: 403 })
     }
   }
