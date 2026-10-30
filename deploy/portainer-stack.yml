@@ -1,0 +1,44 @@
+# Xiryn as a Portainer stack, from the image CI publishes to GHCR.
+# Paste this into Stacks → Add stack → Web editor (or point a Git stack at
+# deploy/portainer-stack.yml) and set the variables below under
+# "Environment variables". See docs/portainer.md.
+
+services:
+  xiryn:
+    image: ${XIRYN_IMAGE:-ghcr.io/snogrammer/xiryn:latest}
+    container_name: xiryn
+    restart: unless-stopped
+    # Talking to Docker needs access to its socket, which is root-only on
+    # most hosts. (Access to the socket is root-equivalent either way.)
+    user: root
+    ports:
+      # Loopback by default: Xiryn has no login. Only set XIRYN_BIND to a LAN
+      # or 0.0.0.0 address behind your own authenticating proxy or VPN.
+      - "${XIRYN_BIND:-127.0.0.1}:${XIRYN_PORT:-6796}:6796"
+    environment:
+      # ── Models ── at least one provider (or set them later in Settings)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      XIRYN_DEFAULT_MODEL: ${XIRYN_DEFAULT_MODEL:-}
+      # ── Web
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      # ── Remote access
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # ── Server ── the address you open Xiryn at, and its hostname(s) so
+      # Xiryn answers on more than localhost
+      XIRYN_URL: ${XIRYN_URL:-http://127.0.0.1:6796}
+      XIRYN_ALLOWED_HOSTS: ${XIRYN_ALLOWED_HOSTS:-}
+      # A container has no desktop to show notifications on
+      XIRYN_DESKTOP_NOTIFY: "off"
+      # Updates come from pulling a newer image, not from the in-app button
+      XIRYN_UPDATE_CHECK: "off"
+    volumes:
+      - xiryn-data:/app/data
+      # Agents' workstations run as sibling containers on the host's Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  xiryn-data:

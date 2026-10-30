@@ -24,6 +24,7 @@
   <a href="#why-xiryn">Why Xiryn</a> ·
   <a href="#how-it-compares">Compare</a> ·
   <a href="docs/telegram.md">Telegram</a> ·
+  <a href="docs/portainer.md">Portainer</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
@@ -273,7 +274,7 @@ cd xiryn
 npm run dev                    # or: npm run build && npm start
 ```
 
-Open **<http://127.0.0.1:6796>** and deploy your first agent. Prefer containers all the way down? `docker compose up -d` runs Xiryn itself in Docker too.
+Open **<http://127.0.0.1:6796>** and deploy your first agent. Prefer containers all the way down? `docker compose up -d` runs Xiryn itself in Docker too, and CI publishes a ready-made image for running it as a Portainer stack: see **[docs/portainer.md](docs/portainer.md)**.
 
 Click **alerts** in the status bar once to allow desktop notifications: you'll hear a chime and get a notification whenever an agent finishes, fails or needs you — even with Xiryn in the background.
 
