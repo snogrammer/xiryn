@@ -1,0 +1,29 @@
+# Keeps the SHA-pinned actions, the base images and the npm lockfile current.
+# Pinned actions and image digests are only safe while something bumps them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /workstation
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      ai-sdk:
+        patterns: ["ai", "@ai-sdk/*", "ai-sdk-ollama"]
+      minor-and-patch:
+        update-types: ["minor", "patch"]
