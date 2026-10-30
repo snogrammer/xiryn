@@ -9,7 +9,9 @@ export async function register() {
   // One-time vault entries (codes, a card used once) don't outlive a day
   const { sweepVault } = await import("./lib/vault")
   sweepVault()
-  setInterval(sweepVault, 60 * 60_000).unref()
+  const shared = globalThis as { __xirynVaultSweep?: NodeJS.Timeout }
+  shared.__xirynVaultSweep ??= setInterval(sweepVault, 60 * 60_000)
+  shared.__xirynVaultSweep.unref()
 
   // Resume the Telegram bridge if a bot token is configured
   const { syncTelegram } = await import("./lib/telegram/bridge")

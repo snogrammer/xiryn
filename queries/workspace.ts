@@ -1,5 +1,6 @@
+import { cache } from "react"
 import { format } from "date-fns"
-import { and, asc, desc, eq, gte, isNotNull, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm"
 import type { SQLiteTable } from "drizzle-orm/sqlite-core"
 
 import { db, DB_PATH } from "@/db"
@@ -91,16 +92,37 @@ export function getNavigation() {
     })
     .from(threads)
     .orderBy(desc(threads.activeAt))
+    .limit(60)
     .all()
 
-  const running = new Set(activeThreadIds())
+  // The newest thread of every agent and squad, however old it is; the list
+  // above only holds the 60 most recent overall
   const latest = new Map<string, string>()
+  for (const row of db.all<{ id: string; owner: string }>(sql`
+    SELECT id, owner FROM (
+      SELECT id, COALESCE(agent_id, squad_id) AS owner,
+        ROW_NUMBER() OVER (
+          PARTITION BY COALESCE(agent_id, squad_id) ORDER BY active_at DESC
+        ) AS rn
+      FROM threads
+      WHERE agent_id IS NOT NULL OR squad_id IS NOT NULL
+    ) WHERE rn = 1
+  `)) {
+    latest.set(row.owner, row.id)
+  }
+
+  const running = new Set(activeThreadIds())
   const busy = new Set<string>()
-  for (const thread of threadRows) {
-    const owner = thread.agentId ?? thread.squadId
-    if (!owner) continue
-    if (!latest.has(owner)) latest.set(owner, thread.id)
-    if (running.has(thread.id)) busy.add(owner)
+  if (running.size > 0) {
+    const owners = db
+      .select({ agentId: threads.agentId, squadId: threads.squadId })
+      .from(threads)
+      .where(inArray(threads.id, [...running]))
+      .all()
+    for (const row of owners) {
+      const owner = row.agentId ?? row.squadId
+      if (owner) busy.add(owner)
+    }
   }
 
   return {
@@ -122,7 +144,7 @@ export function getNavigation() {
       latestThreadId: latest.get(squad.id) ?? null,
       busy: busy.has(squad.id),
     })),
-    threads: threadRows.slice(0, 60).map((thread) => ({
+    threads: threadRows.map((thread) => ({
       ...thread,
       activeAt: thread.activeAt.toISOString(),
       busy: running.has(thread.id),
@@ -137,7 +159,9 @@ export type NavThread = Navigation["threads"][number]
 
 /* ───────────────────────────── threads ──────────────────────────── */
 
-export function getThread(threadId: string) {
+// Memoised per request: a thread page reads it for its metadata and again
+// for its body, and every message's JSON is parsed on the way
+export const getThread = cache(function getThread(threadId: string) {
   const thread = db.query.threads
     .findFirst({
       where: eq(threads.id, threadId),
@@ -159,7 +183,7 @@ export function getThread(threadId: string) {
       : []
   if (members.length === 0) return null
   return { ...thread, members, messages: loadMessages(threadId) }
-}
+})
 
 export type ThreadView = NonNullable<ReturnType<typeof getThread>>
 

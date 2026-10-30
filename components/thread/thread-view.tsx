@@ -540,6 +540,8 @@ export function ThreadView(props: ThreadViewProps) {
     messages: initialMessages,
     transport,
     resume: true,
+    // Streamed chunks arrive faster than the transcript can usefully repaint
+    throttle: 50,
     onFinish: () => {
       // The server settles the run (ledger, preview) just after the last chunk
       setTimeout(() => {
