@@ -616,9 +616,22 @@ export async function getTakeoverLink(
   const result = await execOrThrow(agentId, ["xiryn-tunnel", String(minutes)], {
     timeoutMs: 45_000,
   })
+  // The address is read from the agent's own machine, so it is checked to be
+  // a quick-tunnel address before the person is sent there with the password
   const base = result.stdout.toString().trim().split("\n").at(-1) ?? ""
-  if (!base.startsWith("https://"))
-    throw new Error("The tunnel didn't report an address.")
+  let tunnel: URL | null = null
+  try {
+    tunnel = new URL(base)
+  } catch {}
+  if (
+    !tunnel ||
+    tunnel.protocol !== "https:" ||
+    !/^[a-z0-9-]+\.trycloudflare\.com$/.test(tunnel.hostname) ||
+    tunnel.username ||
+    tunnel.password
+  ) {
+    throw new Error("The tunnel didn't report a usable address.")
+  }
   // Xiryn's phone page (workstation/…/novnc/xiryn.html). Everything it needs
   // rides after the #, which browsers never send to a server, so the
   // password stays out of the tunnel's logs.
@@ -628,7 +641,7 @@ export async function getTakeoverLink(
     ...(agent && { agent }),
     ...(bot && { bot }),
   })
-  return { url: `${new URL("/xiryn.html", base)}#${fragment}`, minutes }
+  return { url: `${new URL("/xiryn.html", tunnel.origin)}#${fragment}`, minutes }
 }
 
 /* ──────────────────────────── status ──────────────────────────── */

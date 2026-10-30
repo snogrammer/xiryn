@@ -138,11 +138,9 @@ export function PaymentApprovalCard({
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="text-[20px] font-semibold tracking-tight">{payment.amount}</span>
         <span className="text-[13.5px]">to {payment.merchant}</span>
-        {payment.host && (
-          <span className="rounded-sm border px-1.5 py-px font-mono text-[10.5px] text-muted-foreground">
-            {payment.host}
-          </span>
-        )}
+        <span className="rounded-sm border px-1.5 py-px font-mono text-[10.5px] text-muted-foreground">
+          {payment.host ?? "site unknown"}
+        </span>
       </div>
       {payment.purpose && (
         <p className="text-[13px] leading-relaxed text-muted-foreground">
