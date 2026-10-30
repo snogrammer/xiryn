@@ -154,6 +154,9 @@ async function create(agentId: string, tag: string) {
       `127.0.0.1::${VNC_PORT}`,
       "--shm-size",
       "1g",
+      // A runaway process tree stays the agent's problem, not the computer's
+      "--pids-limit",
+      "4096",
       "--cpus",
       String(cpus),
       "--memory",
