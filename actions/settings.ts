@@ -75,6 +75,9 @@ export async function saveSettings(values: Record<string, string | null>) {
     if (key === "agent.maxSteps" && value && !/^\d{1,3}$/.test(value.trim())) {
       throw new Error("Max steps must be a whole number.")
     }
+    if (key === "agent.turnTimeout" && value && !/^\d{1,4}$/.test(value.trim())) {
+      throw new Error("The time limit is a whole number of minutes (0 for none).")
+    }
     if (/\.(baseUrl|apiUrl)$/.test(key) && value && !validUrlSetting(value)) {
       throw new Error(
         "That must be an http:// or https:// address, e.g. http://127.0.0.1:11434, without a username or password."

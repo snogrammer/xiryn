@@ -93,6 +93,7 @@ Use `custom/<model-id>`.
 ```bash
 XIRYN_DEFAULT_MODEL=openai/gpt-6-luna   # used by agents without their own model
 XIRYN_MAX_STEPS=40                      # max tool calls per turn
+XIRYN_TURN_TIMEOUT_MINUTES=30           # stop a turn after this long (0: no limit)
 ```
 
 Without `XIRYN_DEFAULT_MODEL`, Xiryn uses the first recommended model of the first configured provider.

@@ -338,7 +338,7 @@ Tasks your agents do on their own, on a schedule — while you sleep, with the b
 
 - **Just ask.** Tell any agent *"every weekday at 9, check for new jobs that fit me"* or *"tomorrow at 7, remind me to call the bank"* — it schedules the routine itself. Ask it to list or cancel them the same way.
 - **Or set it up** on the **Routines** page: who does it, what to do each time, and when — every day, weekdays, one day a week, every few hours, or just once. Start from ideas like a morning news brief, job alerts, a price watch, a weekly research digest or a plan for the week.
-- **Results come to you.** Each routine has its own thread. When a run finishes you get an in-app notification, a desktop notification when no tab is open, and a Telegram message if it's paired — reply there to follow up.
+- **Results come to you.** Each routine has its own thread; each run sees the last five runs there, so a long-lived routine doesn't get slower or costlier over time (use memory for anything it should keep longer). When a run finishes you get an in-app notification, a desktop notification when no tab is open, and a Telegram message if it's paired — reply there to follow up.
 - **See how each run went.** A routine's **History** lists every run: when, how long, what it cost, and why one failed or was skipped.
 - **Runs on your computer.** Times are your computer's local time, and Xiryn has to be running: `npm run background -- login` keeps it that way. A run missed while the computer slept still happens if it's back within a few hours.
 
@@ -401,6 +401,7 @@ Every setting can come from `.env` **or** from **Settings** in the app. Values s
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY` | Hosted model providers |
 | `OLLAMA_BASE_URL`, `LMSTUDIO_BASE_URL`, `CUSTOM_BASE_URL` | Local runtimes and any OpenAI-compatible API |
 | `XIRYN_DEFAULT_MODEL`, `XIRYN_MAX_STEPS` | Default `provider/model`, max tool calls per turn |
+| `XIRYN_TURN_TIMEOUT_MINUTES` | Minutes a turn may run before it's stopped as failed (default 30, `0` for no limit) |
 | `XIRYN_MONTHLY_BUDGET` | Dollars a month for paid models; once spent they wait for the 1st (local models keep working) |
 | `XIRYN_WORKSTATION_CPUS`, `XIRYN_WORKSTATION_MEMORY_GB` | Limits for each agent's machine (default 2 CPUs, 4 GB) |
 | `XIRYN_WORKSTATION_AUTO_STOP_MINUTES`, `XIRYN_WORKSTATION_AUTO_DELETE_MINUTES` | Idle stop; disposable machines |

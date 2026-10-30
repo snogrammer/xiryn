@@ -263,6 +263,7 @@ export function getSettingsView() {
     defaultModel: describeSetting("model.default"),
     resolvedDefaultModel: resolveModelSpec(null),
     maxSteps: describeSetting("agent.maxSteps"),
+    turnTimeout: describeSetting("agent.turnTimeout"),
     workstation: {
       cpus: describeSetting("workstation.cpus"),
       memory: describeSetting("workstation.memory"),

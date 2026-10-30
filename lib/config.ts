@@ -19,6 +19,8 @@ type SettingDef = {
 const integrationSettings = {
   "model.default": { env: "XIRYN_DEFAULT_MODEL" },
   "agent.maxSteps": { env: "XIRYN_MAX_STEPS", fallback: "40" },
+  // Minutes a turn may run before it's stopped as failed; 0 means no limit
+  "agent.turnTimeout": { env: "XIRYN_TURN_TIMEOUT_MINUTES", fallback: "30" },
   // US dollars a month; once reached, turns on paid models wait for next month
   "usage.monthlyBudget": { env: "XIRYN_MONTHLY_BUDGET" },
   // Operating-system notifications when no Xiryn tab is open: "on" or "off"
@@ -146,4 +148,11 @@ export type SettingView = ReturnType<typeof describeSetting>
 export function getMaxSteps() {
   const value = Number.parseInt(getSetting("agent.maxSteps") ?? "", 10)
   return Number.isFinite(value) && value > 0 ? Math.min(value, 200) : 40
+}
+
+// How long a turn may run, in minutes; null when there's no limit
+export function getTurnTimeoutMinutes() {
+  const value = Number.parseInt(getSetting("agent.turnTimeout") ?? "", 10)
+  if (value === 0) return null
+  return Number.isFinite(value) && value > 0 ? Math.min(value, 1440) : 30
 }
