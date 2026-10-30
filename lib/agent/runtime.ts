@@ -119,7 +119,7 @@ function finish(run: Run) {
   // Late reconnects get a 204 and read the saved message instead
   setTimeout(() => {
     if (runs.get(run.threadId) === run) runs.delete(run.threadId)
-  }, 30_000)
+  }, 30_000).unref()
 }
 
 /* ──────────────────────────── loading ──────────────────────────── */

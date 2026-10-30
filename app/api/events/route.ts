@@ -9,6 +9,15 @@ export async function GET(request: Request) {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (text: string) => {
+        // A client that stopped reading but whose socket is still open would
+        // have heartbeats queued for it indefinitely; drop it instead
+        if (controller.desiredSize !== null && controller.desiredSize < -100) {
+          close()
+          try {
+            controller.close()
+          } catch {}
+          return
+        }
         try {
           controller.enqueue(encoder.encode(text))
         } catch {

@@ -138,7 +138,11 @@ export const turns = sqliteTable(
     error: text(),
     createdAt: timestamp(),
   },
-  (t) => [index("turns_created_idx").on(t.createdAt)]
+  (t) => [
+    index("turns_created_idx").on(t.createdAt),
+    index("turns_thread_idx").on(t.threadId),
+    index("turns_agent_idx").on(t.agentId),
+  ]
 )
 
 /* ──────────────────────────── routines ──────────────────────────── */
@@ -170,7 +174,12 @@ export const routines = sqliteTable(
     lastError: text(),
     createdAt: timestamp(),
   },
-  (t) => [index("routines_next_idx").on(t.enabled, t.nextRunAt)]
+  (t) => [
+    index("routines_next_idx").on(t.enabled, t.nextRunAt),
+    index("routines_agent_idx").on(t.agentId),
+    index("routines_squad_idx").on(t.squadId),
+    index("routines_thread_idx").on(t.threadId),
+  ]
 )
 
 // Every time a routine came due or was run by hand, including the times it
@@ -193,7 +202,11 @@ export const routineRuns = sqliteTable(
     startedAt: timestamp(),
     finishedAt: integer({ mode: "timestamp_ms" }),
   },
-  (t) => [index("routine_runs_routine_idx").on(t.routineId, t.startedAt)]
+  (t) => [
+    index("routine_runs_routine_idx").on(t.routineId, t.startedAt),
+    index("routine_runs_thread_idx").on(t.threadId),
+    index("routine_runs_turn_idx").on(t.turnId),
+  ]
 )
 
 /* ───────────────────────────── vault ────────────────────────────── */
@@ -247,7 +260,11 @@ export const vaultApprovals = sqliteTable(
     decidedAt: integer({ mode: "timestamp_ms" }),
     expiresAt: integer({ mode: "timestamp_ms" }),
   },
-  (t) => [index("vault_approvals_thread_idx").on(t.threadId)]
+  (t) => [
+    index("vault_approvals_thread_idx").on(t.threadId),
+    index("vault_approvals_agent_idx").on(t.agentId),
+    index("vault_approvals_item_idx").on(t.itemId),
+  ]
 )
 
 /* ──────────────────────────── settings ──────────────────────────── */

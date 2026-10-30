@@ -180,12 +180,14 @@ const globalForWorkstations = globalThis as unknown as {
     pending: Map<string, Promise<Session>>
     recent: Map<string, Session>
     janitor: NodeJS.Timeout | null
+    sweeping: boolean
   }
 }
 const shared = (globalForWorkstations.__xirynWorkstations ??= {
   pending: new Map(),
   recent: new Map(),
   janitor: null,
+  sweeping: false,
 })
 
 // A machine seen running this recently is used without asking Docker again
@@ -792,11 +794,20 @@ export async function sweepWorkstations() {
 
 export function startWorkstationJanitor() {
   if (shared.janitor) return
-  const sweep = () =>
-    sweepWorkstations().catch((error) =>
+  // A sweep waits on Docker; when Docker is slow the next tick must not start
+  // a second one alongside it
+  const sweep = async () => {
+    if (shared.sweeping) return
+    shared.sweeping = true
+    try {
+      await sweepWorkstations()
+    } catch (error) {
       console.error("[xiryn] workstation cleanup failed:", error)
-    )
-  setTimeout(sweep, 20_000)
+    } finally {
+      shared.sweeping = false
+    }
+  }
+  setTimeout(sweep, 20_000).unref()
   shared.janitor = setInterval(sweep, 5 * 60_000)
   shared.janitor.unref()
 }
