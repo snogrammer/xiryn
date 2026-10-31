@@ -41,6 +41,8 @@ const KEY_SOURCE: Record<KeySource, string> = {
   dpapi: "key protected by Windows (DPAPI)",
   "secret-service": "key in the system keyring",
   file: "key in a private file outside the data folder",
+  "data-file": "key in the data folder, next to the database (see SECURITY.md)",
+  secret: "key from a Docker secret",
   env: "key from XIRYN_VAULT_KEY",
 }
 

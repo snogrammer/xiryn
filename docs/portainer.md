@@ -114,14 +114,22 @@ device that view won't connect. Workarounds until Xiryn proxies it itself:
 
 Pull the newer image and recreate the container: in Portainer open the stack →
 **Update the stack** with **Re-pull image and redeploy** turned on (or let
-GitOps / a webhook do it). Your data — database, vault key and the agents' home
-folders — lives in the `xiryn-data` volume and the workstation volumes, and is
-kept across updates.
+GitOps / a webhook do it). Your data (database and the agents' home folders)
+lives in the `xiryn-data` volume and the workstation volumes, the vault key in
+`xiryn-keys`, and all of it is kept across updates.
 
 ## Backups
 
-Back up the `xiryn-data` volume. It holds `xiryn.db` and the vault key
-(`vault-*.key`); the vault can't be decrypted without that key. To keep the key
-out of the volume, set `XIRYN_VAULT_KEY` to 32 random bytes in base64
-(`openssl rand -base64 32`) **before the first start** — changing it later
-locks you out of anything already in the vault.
+Back up the `xiryn-data` volume (`xiryn.db`) and, **separately**, the
+`xiryn-keys` volume (`vault-*.key`): the vault can't be decrypted without that
+key, and keeping them apart means a copy of the data isn't enough to read it.
+Stacks from before the key had its own volume kept the key in `xiryn-data`;
+with the current stack file it moves to `xiryn-keys` on the next start.
+
+To keep the key out of Docker volumes entirely, give it to Xiryn as a Docker
+secret named `xiryn_vault_key` (mounted at `/run/secrets/xiryn_vault_key`, or
+point `XIRYN_VAULT_KEY_FILE` at it) holding 32 random bytes in base64
+(`openssl rand -base64 32`). `XIRYN_VAULT_KEY` in the environment also works but
+is the weakest option: it shows in `docker inspect` and the process
+environment. Either way, set it **before the first start**: changing the key
+later locks you out of anything already in the vault.

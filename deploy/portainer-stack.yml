@@ -35,10 +35,16 @@ services:
       XIRYN_DESKTOP_NOTIFY: "off"
       # Updates come from pulling a newer image, not from the in-app button
       XIRYN_UPDATE_CHECK: "off"
+      # The vault's key lives in its own volume (below), not beside the database
+      XIRYN_VAULT_KEY_DIR: /app/keys
     volumes:
       - xiryn-data:/app/data
+      # The vault's key, in a volume of its own so a copy of the data isn't
+      # a copy of the key (see XIRYN_VAULT_KEY_DIR above)
+      - xiryn-keys:/app/keys
       # Agents' workstations run as sibling containers on the host's Docker
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   xiryn-data:
+  xiryn-keys:
