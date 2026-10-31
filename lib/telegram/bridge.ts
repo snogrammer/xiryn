@@ -55,8 +55,6 @@ type BridgeState = {
   queues: Map<number, Promise<void>>
   // A token Telegram refused; not retried until it changes
   rejected: string | null
-  // Wrong pairing codes since the last rotation
-  failedPairs: number
   // A one-time code an agent asked for: the next reply is stored, not sent
   awaitingCode?: {
     threadId: string
@@ -65,6 +63,9 @@ type BridgeState = {
     expires: number
   } | null
 }
+
+// When each stranger's chat last got the "private instance" reply
+const strangers = new Map<number, number>()
 
 const globalForBridge = globalThis as unknown as { __xirynTelegram?: BridgeState }
 const state = (globalForBridge.__xirynTelegram ??= {
@@ -76,7 +77,6 @@ const state = (globalForBridge.__xirynTelegram ??= {
   lastPollAt: null,
   queues: new Map(),
   rejected: null,
-  failedPairs: 0,
   awaitingCode: null,
 } as BridgeState)
 
@@ -90,9 +90,17 @@ const COMMANDS = [
 
 /* ───────────────────────────── state ──────────────────────────── */
 
+// A pairing code is good for 15 minutes; Settings shows a fresh one after
+const PAIR_CODE_MS = 15 * 60_000
+
+function pairCodeExpired() {
+  const at = Number(getSetting("telegram.pairCodeAt") ?? 0)
+  return !at || Date.now() - at > PAIR_CODE_MS
+}
+
 export function getPairCode() {
   let code = getSetting("telegram.pairCode")
-  if (!code) code = regeneratePairCode()
+  if (!code || pairCodeExpired()) code = regeneratePairCode()
   return code
 }
 
@@ -103,6 +111,8 @@ export function regeneratePairCode() {
     .map((byte) => alphabet[byte % alphabet.length])
     .join("")
   setSetting("telegram.pairCode", code)
+  setSetting("telegram.pairCodeAt", String(Date.now()))
+  setSetting("telegram.pairFailures", null)
   return code
 }
 
@@ -219,7 +229,10 @@ async function poll(generation: number, token: string, signal: AbortSignal) {
     }
   }
 
-  let offset = 0
+  // Carried over restarts, so updates already handled aren't handed back
+  let offset = Number(getSetting("telegram.offset") ?? 0) || 0
+  // Waits longer after each failure in a row, up to five minutes
+  let backoff = 5_000
   while (live()) {
     try {
       const updates = await callTelegram<TgUpdate[]>(
@@ -230,10 +243,12 @@ async function poll(generation: number, token: string, signal: AbortSignal) {
       )
       state.lastPollAt = Date.now()
       state.error = null
+      backoff = 5_000
       for (const update of updates) {
         offset = update.update_id + 1
         enqueue(token, update)
       }
+      if (updates.length) setSetting("telegram.offset", String(offset))
     } catch (error) {
       if (!live()) return
       if (error instanceof TelegramError && error.code === 409) {
@@ -250,9 +265,10 @@ async function poll(generation: number, token: string, signal: AbortSignal) {
         await sleep(
           error instanceof TelegramError && error.retryAfter
             ? error.retryAfter * 1000
-            : 5_000,
+            : backoff,
           signal
         )
+        backoff = Math.min(backoff * 2, 5 * 60_000)
       }
     }
   }
@@ -340,7 +356,7 @@ async function handle(token: string, update: TgUpdate) {
   if (owner !== from.id) {
     // Pairing: /start CODE (from the deep link) or /pair CODE
     const match = text.match(/^\/(?:start|pair)(?:@\w+)?\s+([A-Za-z0-9_-]+)/)
-    const code = getSetting("telegram.pairCode")
+    const code = pairCodeExpired() ? null : getSetting("telegram.pairCode")
     if (!owner && match && code && match[1].toUpperCase() === code) {
       const name = from.username
         ? `@${from.username}`
@@ -348,20 +364,27 @@ async function handle(token: string, update: TgUpdate) {
       setSetting("telegram.ownerId", String(from.id))
       setSetting("telegram.ownerName", name)
       setSetting("telegram.pairCode", null)
+      setSetting("telegram.pairFailures", null)
       await say(
         token,
         message.chat.id,
         `**Paired.** This Telegram account now controls your Xiryn.\n\nJust write a message to talk to your agent. Use /agents to switch agents or squads, /new for a fresh thread, /stop to interrupt.`
       )
-      state.failedPairs = 0
       await sendAgentPicker(token, message.chat.id)
       return
     }
-    // Guessing is pointless: a few wrong codes and the code changes
-    if (!owner && match && ++state.failedPairs >= 5) {
-      regeneratePairCode()
-      state.failedPairs = 0
+    // Guessing is pointless: a few wrong codes and the code changes. The
+    // count survives restarts.
+    if (!owner && match) {
+      const failures = Number(getSetting("telegram.pairFailures") ?? 0) + 1
+      if (failures >= 5) regeneratePairCode()
+      else setSetting("telegram.pairFailures", String(failures))
     }
+    // Strangers hear back once an hour at most; the rest is dropped
+    const last = strangers.get(message.chat.id) ?? 0
+    if (Date.now() - last < 60 * 60_000) return
+    if (strangers.size > 1000) strangers.clear()
+    strangers.set(message.chat.id, Date.now())
     await say(
       token,
       message.chat.id,
@@ -377,17 +400,22 @@ async function handle(token: string, update: TgUpdate) {
     return
   }
 
-  // A code an agent asked for goes into the vault, not into the conversation
+  // A code an agent asked for goes into the vault, not into the conversation.
+  // A plain reply counts only if it looks like a code (it has a digit), so
+  // "ok" or "done" isn't swallowed; "/code …" always counts.
   const awaiting = state.awaitingCode
-  if (
-    awaiting &&
-    Date.now() < awaiting.expires &&
-    /^[A-Za-z0-9][A-Za-z0-9 -]{2,15}$/.test(text)
-  ) {
+  const live = awaiting && Date.now() < awaiting.expires
+  if (live && /^\/cancel(?:@\w+)?$/i.test(text)) {
+    state.awaitingCode = null
+    return say(token, message.chat.id, "Stopped waiting for the code.")
+  }
+  const explicit = text.match(/^\/code(?:@\w+)?\s+(.+)$/i)?.[1]?.trim()
+  const candidate = explicit ?? (/\d/.test(text) ? text : null)
+  if (live && candidate && /^[A-Za-z0-9][A-Za-z0-9 -]{2,15}$/.test(candidate)) {
     state.awaitingCode = null
     const answer = answerSecret(
       "code",
-      { code: text.replace(/\s/g, "") },
+      { code: candidate.replace(/\s/g, "") },
       { save: false }
     )
     await callTelegram(token, "deleteMessage", {
@@ -1171,7 +1199,7 @@ export async function notifySecret({
           "",
           escape(request.reason),
           "",
-          `Reply here with just the code. It goes straight into your vault, is used once and deleted, and ${name} never sees it.`,
+          `Reply here with just the code (or <code>/code 123456</code>). It goes straight into your vault, is used once and deleted, and ${name} never sees it. /cancel if there's no code.`,
         ]
       : [
           `🔐 <b>${name} needs ${SECRET_LABEL[request.kind]}${request.site ? ` for ${escape(request.site)}` : ""}</b>`,

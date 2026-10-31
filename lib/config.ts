@@ -55,6 +55,11 @@ const integrationSettings = {
   "telegram.notify": { env: "XIRYN_TELEGRAM_NOTIFY", fallback: "long" },
   "telegram.ownerName": { env: null, internal: true },
   "telegram.pairCode": { env: null, internal: true },
+  // When the pairing code was made (it expires) and wrong guesses since
+  "telegram.pairCodeAt": { env: null, internal: true },
+  "telegram.pairFailures": { env: null, internal: true },
+  // The next update to ask Telegram for, so a restart doesn't replay any
+  "telegram.offset": { env: null, internal: true },
   // JSON: which agent/squad and thread Telegram messages go to
   "telegram.target": { env: null, internal: true },
 } satisfies Record<string, SettingDef>
