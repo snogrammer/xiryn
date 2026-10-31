@@ -168,7 +168,8 @@ function Parts({
   )
 }
 
-function UserMessage({
+// Memoised: while a reply streams, only the message that changed re-renders
+const UserMessage = React.memo(function UserMessage({
   message,
   addressee,
 }: {
@@ -259,9 +260,9 @@ function UserMessage({
       </div>
     </div>
   )
-}
+})
 
-function AgentMessage({
+const AgentMessage = React.memo(function AgentMessage({
   message,
   members,
   streaming,
@@ -326,7 +327,7 @@ function AgentMessage({
       )}
     </div>
   )
-}
+})
 
 function ScrollToBottom() {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext()

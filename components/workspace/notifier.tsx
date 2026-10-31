@@ -28,6 +28,8 @@ type Notifications = {
   toggle: () => void
   // Hear every event as it arrives (an open thread follows its turns)
   listen: (listener: (event: XirynEvent) => void) => () => void
+  // Re-reads the page's server data, at most once per burst of changes
+  refresh: () => void
 }
 
 const NotificationsContext = React.createContext<Notifications>({
@@ -35,6 +37,7 @@ const NotificationsContext = React.createContext<Notifications>({
   permission: "unsupported",
   toggle: () => {},
   listen: () => () => {},
+  refresh: () => {},
 })
 
 export const useNotifications = () => React.useContext(NotificationsContext)
@@ -262,6 +265,35 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     here.current = { pathname, enabled }
   }, [pathname, enabled])
 
+  // One turn sends several events and the thread asks for its own refresh
+  // too; each refresh re-renders the layout and the page on the server. So
+  // they're gathered into one, and a tab nobody is looking at waits until
+  // it's looked at.
+  const pending = React.useRef<{ timer: number | null; stale: boolean }>({
+    timer: null,
+    stale: false,
+  })
+  const refresh = React.useCallback(() => {
+    if (document.visibilityState !== "visible") {
+      pending.current.stale = true
+      return
+    }
+    if (pending.current.timer !== null) window.clearTimeout(pending.current.timer)
+    pending.current.timer = window.setTimeout(() => {
+      pending.current.timer = null
+      router.refresh()
+    }, 500)
+  }, [router])
+  React.useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || !pending.current.stale) return
+      pending.current.stale = false
+      refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [refresh])
+
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEnabled(readPreference())
@@ -285,7 +317,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       } catch {
         return
       }
-      router.refresh()
+      refresh()
       for (const listener of listeners.current) listener(event)
       // A turn starting is news only for the page showing it
       if (event.type === "turn-started" || !here.current.enabled) return
@@ -331,7 +363,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       }
     }
     return () => source.close()
-  }, [router])
+  }, [router, refresh])
 
   const toggle = React.useCallback(() => {
     const askable = "Notification" in window && Notification.permission === "default"
@@ -346,8 +378,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [enabled])
 
   const value = React.useMemo(
-    () => ({ enabled, permission, toggle, listen }),
-    [enabled, permission, toggle, listen]
+    () => ({ enabled, permission, toggle, listen, refresh }),
+    [enabled, permission, toggle, listen, refresh]
   )
   return (
     <NotificationsContext value={value}>
