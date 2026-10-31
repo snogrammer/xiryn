@@ -67,9 +67,19 @@ function hostnameFor(name: string | undefined) {
 
 /* ─────────────────────────── lifecycle ─────────────────────────── */
 
+// Bumped when the flags a workstation is created with change, so existing
+// machines are recreated (home folder kept) the next time they start, the
+// way a new image does
+const CONFIG_VERSION = "2"
+
+// Workstations share one network on which they can't reach each other
+// (inter-container traffic off); they still reach the internet
+const WS_NETWORK = "xiryn-ws"
+
 type Inspection = {
   status: string
   image: string
+  config: string
   startedAt: string
   finishedAt: string
   cpus: number
@@ -83,7 +93,7 @@ async function inspect(name: string): Promise<Inspection | null> {
       "--type",
       "container",
       "--format",
-      '{{.State.Status}}\t{{index .Config.Labels "xiryn.image"}}\t{{.State.StartedAt}}\t{{.State.FinishedAt}}\t{{.HostConfig.NanoCpus}}\t{{.HostConfig.Memory}}',
+      '{{.State.Status}}\t{{index .Config.Labels "xiryn.image"}}\t{{index .Config.Labels "xiryn.config"}}\t{{.State.StartedAt}}\t{{.State.FinishedAt}}\t{{.HostConfig.NanoCpus}}\t{{.HostConfig.Memory}}',
       name,
     ],
     { timeoutMs: 20_000 }
@@ -92,17 +102,43 @@ async function inspect(name: string): Promise<Inspection | null> {
     if (/no such (container|object)/i.test(stderr)) return null
     throw new Error(dockerReason(stderr) || "Couldn't look up the workstation.")
   }
-  const [status, image, startedAt, finishedAt, nanoCpus, memory] = stdout
+  const [status, image, config, startedAt, finishedAt, nanoCpus, memory] = stdout
     .toString()
     .trim()
     .split("\t")
   return {
     status,
     image,
+    config,
     startedAt,
     finishedAt,
     cpus: Number(nanoCpus) / 1e9 || 0,
     memoryBytes: Number(memory) || 0,
+  }
+}
+
+async function ensureNetwork() {
+  const found = await dockerRaw(["network", "inspect", WS_NETWORK], { timeoutMs: 20_000 })
+  if (found.exitCode === 0) return
+  const made = await dockerRaw(
+    [
+      "network",
+      "create",
+      "--driver",
+      "bridge",
+      "--opt",
+      "com.docker.network.bridge.enable_icc=false",
+      "--label",
+      `xiryn.install=${installId()}`,
+      WS_NETWORK,
+    ],
+    { timeoutMs: 30_000 }
+  )
+  // Another start may have made it a moment ago
+  if (made.exitCode !== 0 && !/already exists/i.test(made.stderr)) {
+    throw new Error(
+      dockerReason(made.stderr) || "Couldn't create the workstation network."
+    )
   }
 }
 
@@ -122,6 +158,7 @@ async function create(agentId: string, tag: string) {
   const password = randomBytes(9).toString("base64url").slice(0, 8)
   const labels = [`xiryn.agent=${agentId}`, `xiryn.install=${installId()}`]
 
+  await ensureNetwork()
   await docker([
     "volume",
     "create",
@@ -140,6 +177,13 @@ async function create(agentId: string, tag: string) {
       ...labels.flatMap((l) => ["--label", l]),
       "--label",
       `xiryn.image=${tag}`,
+      "--label",
+      `xiryn.config=${CONFIG_VERSION}`,
+      "--network",
+      WS_NETWORK,
+      // No raw sockets: no sniffing or spoofing on the bridge (ping still works)
+      "--cap-drop",
+      "NET_RAW",
       "--env",
       `XIRYN_VNC_PASSWORD=${password}`,
       "--env",
@@ -198,10 +242,14 @@ async function prepare(agentId: string): Promise<Session> {
   const name = containerName(agentId)
   let found = await inspect(name)
 
-  // A stopped machine on an outdated image is recreated; its home folder,
-  // which lives in a volume, carries over
+  // A stopped machine on an outdated image or configuration is recreated;
+  // its home folder, which lives in a volume, carries over
   const current = imageTag()
-  if (found && found.status !== "running" && found.image !== current) {
+  if (
+    found &&
+    found.status !== "running" &&
+    (found.image !== current || found.config !== CONFIG_VERSION)
+  ) {
     await docker(["rm", "--force", name])
     found = null
   }
@@ -669,6 +717,17 @@ export async function getTakeoverLink(
 
 const relayName = (agentId: string) => `xiryn-relay-${agentId}`
 
+// Workstations can't reach each other on their shared network, so a relay
+// gets a private network with just its workstation, for as long as it runs
+async function closeRelay(agentId: string) {
+  const name = relayName(agentId)
+  await dockerRaw(["rm", "--force", name], { timeoutMs: 20_000 })
+  await dockerRaw(["network", "disconnect", "--force", name, containerName(agentId)], {
+    timeoutMs: 20_000,
+  })
+  await dockerRaw(["network", "rm", name], { timeoutMs: 20_000 })
+}
+
 // The quick-tunnel address in a relay's log, checked to be one
 async function relayAddress(name: string) {
   const logs = await dockerRaw(["logs", name], { timeoutMs: 10_000, maxBytes: 256_000 })
@@ -698,30 +757,47 @@ async function openRelay(agentId: string, minutes: number) {
     const origin =
       until - Date.now() >= (minutes * 60_000) / 2 ? await relayAddress(name) : null
     if (origin) return { origin, until }
-    await dockerRaw(["rm", "--force", name], { timeoutMs: 20_000 })
   }
+  await closeRelay(agentId)
 
-  // Where the workstation's VNC server answers, on its own network
   const workstation = await inspect(containerName(agentId))
   if (workstation?.image !== imageTag()) {
     throw new Error(
       "Phone links need the updated desktop. It updates the next time this agent's machine restarts (or reset it in Settings)."
     )
   }
+  // Where the workstation's VNC server answers, on the relay's network
+  await docker(
+    [
+      "network",
+      "create",
+      "--label",
+      `xiryn.relay=${agentId}`,
+      "--label",
+      `xiryn.install=${installId()}`,
+      name,
+    ],
+    { timeoutMs: 30_000 }
+  )
+  await docker(["network", "connect", name, containerName(agentId)], {
+    timeoutMs: 30_000,
+  })
   const network = await docker(
     [
       "inspect",
       "--type",
       "container",
       "--format",
-      "{{range $name, $net := .NetworkSettings.Networks}}{{$name}}\t{{$net.IPAddress}}\n{{end}}",
+      `{{(index .NetworkSettings.Networks "${name}").IPAddress}}`,
       containerName(agentId),
     ],
     { timeoutMs: 10_000 }
   )
-  const [networkName, address] =
-    network.stdout.toString().trim().split("\n")[0]?.split("\t") ?? []
-  if (!networkName || !address) throw new Error("The desktop isn't reachable yet.")
+  const address = network.stdout.toString().trim()
+  if (!address) {
+    await closeRelay(agentId)
+    throw new Error("The desktop isn't reachable yet.")
+  }
 
   const until = Date.now() + minutes * 60_000
   await docker(
@@ -738,7 +814,7 @@ async function openRelay(agentId: string, minutes: number) {
       "--label",
       `xiryn.until=${until}`,
       "--network",
-      networkName,
+      name,
       "--memory",
       "256m",
       "--cpus",
@@ -788,7 +864,7 @@ async function openRelay(agentId: string, minutes: number) {
     }
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  await dockerRaw(["rm", "--force", name], { timeoutMs: 20_000 })
+  await closeRelay(agentId)
   throw new Error("Couldn't open a tunnel to the desktop.")
 }
 
@@ -834,7 +910,7 @@ export async function getWorkstationStatus(agentId: string): Promise<Workstation
   return {
     state: running ? "running" : found.status === "restarting" ? "starting" : "stopped",
     container: name,
-    outdated: found.image !== imageTag(),
+    outdated: found.image !== imageTag() || found.config !== CONFIG_VERSION,
     cpus: found.cpus,
     memoryGb: found.memoryBytes / 1024 ** 3,
     diskBytes,
@@ -853,7 +929,7 @@ export async function stopWorkstation(agentId: string) {
 // Removes the machine and its home folder
 export async function deleteWorkstation(agentId: string) {
   shared.recent.delete(agentId)
-  await dockerRaw(["rm", "--force", relayName(agentId)], { timeoutMs: 20_000 })
+  await closeRelay(agentId)
   await dockerRaw(["rm", "--force", "--volumes", containerName(agentId)], {
     timeoutMs: 60_000,
   })
@@ -933,6 +1009,32 @@ export async function sweepWorkstations() {
   ])
   for (const agentId of volumes.stdout.toString().split(/\r?\n/).filter(Boolean)) {
     if (!known.has(agentId)) await dockerRaw(["volume", "rm", volumeName(agentId)])
+  }
+
+  // A relay removes itself when its time is up; its network stays behind
+  const relayNetworks = await docker([
+    "network",
+    "ls",
+    "--filter",
+    `label=xiryn.install=${install}`,
+    "--filter",
+    "label=xiryn.relay",
+    "--format",
+    '{{.Label "xiryn.relay"}}',
+  ])
+  for (const agentId of relayNetworks.stdout.toString().split(/\r?\n/).filter(Boolean)) {
+    const relay = await dockerRaw(
+      [
+        "inspect",
+        "--type",
+        "container",
+        "--format",
+        "{{.State.Running}}",
+        relayName(agentId),
+      ],
+      { timeoutMs: 10_000 }
+    )
+    if (relay.stdout.toString().trim() !== "true") await closeRelay(agentId)
   }
 }
 
