@@ -61,6 +61,8 @@ Still in **Settings → Remote access**, step 3 shows a **QR code** and a
 - **Click "Open in Telegram"** on the computer → tap **Start**.
 - **Type it:** send `/pair YOURCODE` to your bot.
 
+The code is good for 15 minutes; after that, Settings shows a new one.
+
 The page updates by itself to **Paired with @you** and the bot greets you.
 From now on that account is the only one the bot will answer.
 
@@ -110,7 +112,7 @@ on makemytrip.com
 
 Tap a saved card or UPI ID to let the agent pay with it, **I'll pay myself** to get a live link to its desktop, or **Decline**. Decide in the app instead and the message updates itself. Cards and UPI IDs are saved in **Settings → Vault** on your computer — never send them in this chat.
 
-If a site sends you a one-time code, the bot asks for it: reply with just the code. It goes straight into your vault, is used once and deleted, and the message is removed from the chat. The agent never sees it.
+If a site sends you a one-time code, the bot asks for it: reply with just the code (it must contain a digit, so a reply like "ok" isn't mistaken for one), or send `/code` followed by it; `/cancel` stops waiting. It goes straight into your vault, is used once and deleted, and the message is removed from the chat. The agent never sees it.
 
 ### Hand-offs
 
@@ -180,8 +182,9 @@ Set `TELEGRAM_OWNER_ID` in `.env` to your numeric Telegram user id (ask
 
 - The token is stored in `.env` or in your local database (`data/xiryn.db`) and
   never sent anywhere except to Telegram.
-- Only the paired account is answered. A pairing code is single-use and is
-  replaced automatically after a few wrong guesses.
+- Only the paired account is answered. A pairing code is single-use, expires
+  after 15 minutes and is replaced after five wrong guesses (counted across
+  restarts). Anyone else gets one "private instance" reply an hour at most.
 - Messages travel through Telegram's servers like any Telegram chat. Don't send
   through the bot anything you wouldn't send in a regular Telegram message.
 - Hand-off links grant access to that agent's desktop until they expire
