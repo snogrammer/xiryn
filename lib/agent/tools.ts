@@ -77,6 +77,22 @@ export type ToolEnv = {
 
 const MAX_OUTPUT = 20_000
 
+// Output that came from outside (pages, search results, files, commands)
+// reaches the model inside a labelled block, so the instructions can tell
+// it that nothing in there is an order. It's JSON inside, with any closing
+// tag escaped, so the content can't end the block early.
+function untrusted(
+  source: string,
+  output: unknown,
+  attributes: Record<string, string> = {}
+) {
+  const attrs = Object.entries({ source, ...attributes })
+    .map(([key, value]) => ` ${key}="${value.replace(/["<>]/g, "")}"`)
+    .join("")
+  const body = JSON.stringify(output).replace(/<\/untrusted/gi, "<\\/untrusted")
+  return { type: "text" as const, value: `<untrusted${attrs}>\n${body}\n</untrusted>` }
+}
+
 function clip(text: string) {
   if (text.length <= MAX_OUTPUT) return text
   return `${text.slice(0, MAX_OUTPUT)}\n… ${text.length - MAX_OUTPUT} more characters truncated`
@@ -196,6 +212,7 @@ export function createWorkstationTools(env: ToolEnv) {
           durationMs: Date.now() - started,
         }
       },
+      toModelOutput: ({ output }) => untrusted("shell", output),
     }),
 
     fs_read: tool({
@@ -207,6 +224,7 @@ export function createWorkstationTools(env: ToolEnv) {
         const file = await readFile(agentId(), path)
         return { path, content: clip(file.content.toString("utf8")), bytes: file.bytes }
       },
+      toModelOutput: ({ output }) => untrusted("fs_read", output, { path: output.path }),
     }),
 
     fs_write: tool({
@@ -587,6 +605,7 @@ export function createWebTools() {
         query,
         results: await webSearch(query, limit),
       }),
+      toModelOutput: ({ output }) => untrusted("web_search", output),
     }),
 
     web_fetch: tool({
@@ -594,6 +613,8 @@ export function createWebTools() {
         "Read a web page as clean markdown. Use it on URLs from search results or ones the person gives you.",
       inputSchema: z.object({ url: z.url() }),
       execute: async ({ url }) => webFetch(url),
+      toModelOutput: ({ output, input }) =>
+        untrusted("web_fetch", output, { url: input.url }),
     }),
   }
 }
@@ -673,6 +694,17 @@ function describeRoutine(routine: Routine) {
 
 // Scheduling from a conversation: "every morning at 8, send me…"
 export function createRoutineTools(env: ToolEnv) {
+  // The routines this agent may see and cancel: its own, or in a squad's
+  // thread, the squad's
+  const ownRoutine = (routine: { agentId: string | null; squadId: string | null }) => {
+    const squadId = db
+      .select({ squadId: threads.squadId })
+      .from(threads)
+      .where(eq(threads.id, env.threadId))
+      .get()?.squadId
+    return squadId ? routine.squadId === squadId : routine.agentId === env.current().id
+  }
+
   return {
     routine_create: tool({
       description:
@@ -754,7 +786,7 @@ export function createRoutineTools(env: ToolEnv) {
 
     routine_list: tool({
       description:
-        "List the scheduled routines in this workspace: what each does, when, and when it runs next.",
+        "List your scheduled routines (or, in a squad, the squad's): what each does, when, and when it runs next.",
       inputSchema: z.object({}),
       execute: async () => ({
         routines: db
@@ -762,6 +794,7 @@ export function createRoutineTools(env: ToolEnv) {
           .from(routines)
           .orderBy(asc(routines.createdAt))
           .all()
+          .filter(ownRoutine)
           .map(describeRoutine),
       }),
     }),
@@ -771,7 +804,9 @@ export function createRoutineTools(env: ToolEnv) {
         "Delete a scheduled routine by its id (from routine_list) when the person asks to stop or cancel it. Its thread and past results are kept.",
       inputSchema: z.object({ id: z.string().describe("The routine's id") }),
       execute: async ({ id }) => {
-        const routine = db.select().from(routines).where(eq(routines.id, id)).get()
+        const found = db.select().from(routines).where(eq(routines.id, id)).get()
+        // Only this agent's routines (or its squad's), however the id was found
+        const routine = found && ownRoutine(found) ? found : null
         if (!routine)
           throw new Error("No routine has that id. Use routine_list to find it.")
         db.delete(routines).where(eq(routines.id, id)).run()
