@@ -32,6 +32,10 @@ export async function register() {
   screens.__xirynScreenSweep ??= setInterval(sweepScreens, 60 * 60_000)
   screens.__xirynScreenSweep.unref()
 
+  // Database upkeep and history pruning for long uptimes
+  const { startMaintenance } = await import("./lib/maintenance")
+  startMaintenance()
+
   // Resume the Telegram bridge if a bot token is configured
   const { syncTelegram } = await import("./lib/telegram/bridge")
   syncTelegram()

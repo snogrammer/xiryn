@@ -286,7 +286,7 @@ npm run background -- login     # …and whenever you log in to this computer
 npm run background -- stop      # stop it (status, restart and no-login work too)
 ```
 
-It serves a production build on 127.0.0.1, built once and again after each update, and logs to `data/xiryn.log`. Agents, routines and Telegram keep working with every window closed; with no Xiryn tab open, your computer itself shows a notification when an agent finishes or needs you.
+It serves a production build on 127.0.0.1, built once and again after each update, starts it again if it crashes, and logs to `data/xiryn.log` (rotated at 10 MB). Agents, routines and Telegram keep working with every window closed; with no Xiryn tab open, your computer itself shows a notification when an agent finishes or needs you.
 
 ## Updating
 
