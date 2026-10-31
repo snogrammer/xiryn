@@ -62,6 +62,8 @@ type Run = {
   startedAt: number
   // Stops the run once it passes the turn time limit
   deadline?: NodeJS.Timeout
+  // Where in `chunks` the screenshot kept for replays is
+  lastImage?: number
 }
 
 const globalForRuns = globalThis as unknown as { __xirynRuns?: Map<string, Run> }
@@ -100,8 +102,29 @@ export function stopRun(threadId: string) {
   return true
 }
 
+// A reconnecting page replays the run from its chunks. Each desktop action
+// carries a screenshot, so only the newest one is kept for the replay (the
+// saved message has the rest); live listeners still get every chunk whole.
+function forReplay(run: Run, chunk: UIMessageChunk) {
+  const output = (chunk as { output?: { image?: unknown } }).output
+  if (chunk.type !== "tool-output-available" || typeof output?.image !== "string") {
+    return chunk
+  }
+  if (run.lastImage !== undefined) {
+    const previous = run.chunks[run.lastImage] as UIMessageChunk & {
+      output: Record<string, unknown>
+    }
+    run.chunks[run.lastImage] = {
+      ...previous,
+      output: { ...previous.output, image: null },
+    } as UIMessageChunk
+  }
+  run.lastImage = run.chunks.length
+  return chunk
+}
+
 function publish(run: Run, chunk: UIMessageChunk) {
-  run.chunks.push(chunk)
+  run.chunks.push(forReplay(run, chunk))
   for (const listener of run.listeners) {
     try {
       listener.enqueue(chunk)

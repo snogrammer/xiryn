@@ -9,16 +9,18 @@
 //   npm run background -- login        also start it whenever you log in
 //   npm run background -- no-login     stop starting it at login
 //
-// Output goes to data/xiryn.log.
+// A small supervisor runs the server and starts it again if it crashes.
+// Output goes to data/xiryn.log, which is rotated to xiryn.log.1 at 10 MB.
 
 import { spawn, spawnSync } from "node:child_process"
 import {
-  closeSync,
+  createWriteStream,
   existsSync,
   mkdirSync,
-  openSync,
   readFileSync,
+  renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import os from "node:os"
@@ -29,6 +31,7 @@ const script = path.join(root, "scripts", "background.mjs")
 const dataDir = path.resolve(root, process.env.XIRYN_DATA_DIR || "data")
 const pidFile = path.join(dataDir, "background.pid")
 const logFile = path.join(dataDir, "xiryn.log")
+const LOG_MAX = 10 * 1024 * 1024
 const builtFile = path.join(dataDir, "background-build.json")
 const keyFile = path.join(dataDir, "access.key")
 const URL = "http://127.0.0.1:6796"
@@ -131,20 +134,16 @@ async function start() {
   }
   if (needsBuild()) build()
 
-  const log = openSync(logFile, "a")
-  const child = spawn(
-    process.execPath,
-    [next, "start", "--hostname", "127.0.0.1", "--port", "6796"],
-    {
-      cwd: root,
-      detached: true,
-      stdio: ["ignore", log, log],
-      windowsHide: true,
-      env: { ...process.env, NODE_ENV: "production" },
-    }
-  )
+  // The supervisor (see supervise) leads its own process group, so `stop`
+  // takes it and the server down together
+  const child = spawn(process.execPath, [script, "run"], {
+    cwd: root,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+    env: { ...process.env, NODE_ENV: "production" },
+  })
   child.unref()
-  closeSync(log)
   writeFileSync(pidFile, String(child.pid))
 
   const deadline = Date.now() + 90_000
@@ -164,6 +163,72 @@ async function start() {
   }
   console.log(bad(`Xiryn didn't start. See the log: ${logFile}`))
   process.exit(1)
+}
+
+// Runs the server and starts it again when it crashes: soon after a crash,
+// then backing off up to a minute if it keeps crashing. Its output goes to
+// the log, rotated once it passes LOG_MAX.
+async function supervise() {
+  let stopping = false
+  let server = null
+  const stopServer = () => {
+    stopping = true
+    server?.kill("SIGTERM")
+  }
+  process.on("SIGTERM", stopServer)
+  process.on("SIGINT", stopServer)
+
+  let out = null
+  let size = 0
+  const open = () => {
+    try {
+      size = statSync(logFile).size
+    } catch {
+      size = 0
+    }
+    if (size > LOG_MAX) {
+      renameSync(logFile, `${logFile}.1`)
+      size = 0
+    }
+    out = createWriteStream(logFile, { flags: "a" })
+  }
+  const write = (chunk) => {
+    out.write(chunk)
+    size += chunk.length
+    if (size > LOG_MAX) {
+      out.end()
+      open()
+    }
+  }
+  open()
+
+  let delay = 1000
+  while (!stopping) {
+    const startedAt = Date.now()
+    server = spawn(
+      process.execPath,
+      [next, "start", "--hostname", "127.0.0.1", "--port", "6796"],
+      {
+        cwd: root,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        env: { ...process.env, NODE_ENV: "production" },
+      }
+    )
+    server.stdout.on("data", write)
+    server.stderr.on("data", write)
+    const code = await new Promise((resolve) =>
+      server.on("exit", (exitCode, signal) => resolve(exitCode ?? signal))
+    )
+    if (stopping || code === 0) break
+    // A server that ran a while before crashing starts again right away
+    delay = Date.now() - startedAt > 60_000 ? 1000 : Math.min(delay * 2, 60_000)
+    write(
+      `[xiryn] the server stopped unexpectedly (exit ${code}); starting it again in ${delay / 1000}s\n`
+    )
+    await new Promise((resolve) => setTimeout(resolve, delay))
+  }
+  out.end()
 }
 
 // The Node processes in a process tree on Windows, the root first
@@ -323,8 +388,12 @@ function noLogin() {
 
 /* ────────────────────────────── run ────────────────────────────── */
 
-console.log("\n  xiryn · background\n")
+if (command !== "run") console.log("\n  xiryn · background\n")
 switch (command) {
+  case "run":
+    await supervise()
+    process.exit(0)
+    break
   case "start":
     await start()
     break
