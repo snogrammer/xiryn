@@ -41,7 +41,9 @@ xfce4-panel >"$state/panel.log" 2>&1 &
 feh --no-fehbg --bg-fill /usr/share/xiryn/wallpaper.png 2>/dev/null \
   || xsetroot -solid "#0b0e14"
 
-x11vnc -display "$DISPLAY" -rfbauth "$state/vncpass" -rfbport 5900 -localhost \
+# Not -localhost: a phone take-over's relay (a separate container Xiryn
+# starts, see getTakeoverLink) connects here directly. Still password only.
+x11vnc -display "$DISPLAY" -rfbauth "$state/vncpass" -rfbport 5900 \
   -forever -shared -noxdamage -quiet >"$state/x11vnc.log" 2>&1 &
 vnc=$!
 websockify --web /usr/share/novnc 6080 localhost:5900 >"$state/websockify.log" 2>&1 &
@@ -60,7 +62,7 @@ while sleep 20; do
   done
 
   # Someone watching the screen or a command still running counts as activity
-  if [ -n "$(ss -Htn state established '( sport = :6080 )' 2>/dev/null)" ] \
+  if [ -n "$(ss -Htn state established '( sport = :6080 or sport = :5900 )' 2>/dev/null)" ] \
     || pgrep -f '^/bin/bash /usr/local/bin/xiryn-run' >/dev/null; then
     touch "$state/active"
   fi
