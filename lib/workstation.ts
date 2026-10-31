@@ -636,44 +636,160 @@ export function phoneLinksEnabled() {
 }
 
 // A link that opens the agent's live desktop in any browser, a phone
-// included, through a temporary Cloudflare quick tunnel. The tunnel closes
-// itself after `minutes`; the link carries the desktop's password.
+// included, through a temporary Cloudflare quick tunnel. The link carries
+// the desktop's password.
+//
+// The tunnel and the page it serves run in a relay container Xiryn starts
+// from the workstation image, not in the agent's machine: the agent can't
+// choose the address the person is sent to, change the page they see, or
+// keep the tunnel open past its time. The relay's own noVNC connects
+// straight to the workstation's VNC server, so the agent only ever supplies
+// the pixels.
 export async function getTakeoverLink(
   agentId: string,
   { minutes = 30, agent, bot }: { minutes?: number; agent?: string; bot?: string } = {}
 ) {
   if (!phoneLinksEnabled()) return null
   const { password } = await getDesktopAccess(agentId)
-  const result = await execOrThrow(agentId, ["xiryn-tunnel", String(minutes)], {
-    timeoutMs: 45_000,
-    maxBytes: 4_000,
-  })
-  // The address is read from the agent's own machine, so it is checked to be
-  // a quick-tunnel address before the person is sent there with the password
-  const base = result.stdout.toString().trim().split("\n").at(-1) ?? ""
-  let tunnel: URL | null = null
-  try {
-    tunnel = new URL(base)
-  } catch {}
-  if (
-    !tunnel ||
-    tunnel.protocol !== "https:" ||
-    !/^[a-z0-9-]+\.trycloudflare\.com$/.test(tunnel.hostname) ||
-    tunnel.username ||
-    tunnel.password
-  ) {
-    throw new Error("The tunnel didn't report a usable address.")
-  }
+  const tunnel = await openRelay(agentId, minutes)
   // Xiryn's phone page (workstation/…/novnc/xiryn.html). Everything it needs
   // rides after the #, which browsers never send to a server, so the
   // password stays out of the tunnel's logs.
   const fragment = new URLSearchParams({
     password,
-    until: String(Date.now() + minutes * 60_000),
+    until: String(tunnel.until),
     ...(agent && { agent }),
     ...(bot && { bot }),
   })
-  return { url: `${new URL("/xiryn.html", tunnel.origin)}#${fragment}`, minutes }
+  return {
+    url: `${new URL("/xiryn.html", tunnel.origin)}#${fragment}`,
+    minutes: Math.round((tunnel.until - Date.now()) / 60_000),
+  }
+}
+
+const relayName = (agentId: string) => `xiryn-relay-${agentId}`
+
+// The quick-tunnel address in a relay's log, checked to be one
+async function relayAddress(name: string) {
+  const logs = await dockerRaw(["logs", name], { timeoutMs: 10_000, maxBytes: 256_000 })
+  const found = `${logs.stdout}\n${logs.stderr}`.match(
+    /https:\/\/[a-z0-9-]+\.trycloudflare\.com/
+  )
+  return found ? new URL(found[0]).origin : null
+}
+
+async function openRelay(agentId: string, minutes: number) {
+  const name = relayName(agentId)
+
+  // Reuse a relay that still has at least half its time left
+  const running = await dockerRaw(
+    [
+      "inspect",
+      "--type",
+      "container",
+      "--format",
+      '{{index .Config.Labels "xiryn.until"}}',
+      name,
+    ],
+    { timeoutMs: 10_000 }
+  )
+  if (running.exitCode === 0) {
+    const until = Number(running.stdout.toString().trim())
+    const origin =
+      until - Date.now() >= (minutes * 60_000) / 2 ? await relayAddress(name) : null
+    if (origin) return { origin, until }
+    await dockerRaw(["rm", "--force", name], { timeoutMs: 20_000 })
+  }
+
+  // Where the workstation's VNC server answers, on its own network
+  const workstation = await inspect(containerName(agentId))
+  if (workstation?.image !== imageTag()) {
+    throw new Error(
+      "Phone links need the updated desktop. It updates the next time this agent's machine restarts (or reset it in Settings)."
+    )
+  }
+  const network = await docker(
+    [
+      "inspect",
+      "--type",
+      "container",
+      "--format",
+      "{{range $name, $net := .NetworkSettings.Networks}}{{$name}}\t{{$net.IPAddress}}\n{{end}}",
+      containerName(agentId),
+    ],
+    { timeoutMs: 10_000 }
+  )
+  const [networkName, address] =
+    network.stdout.toString().trim().split("\n")[0]?.split("\t") ?? []
+  if (!networkName || !address) throw new Error("The desktop isn't reachable yet.")
+
+  const until = Date.now() + minutes * 60_000
+  await docker(
+    [
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      name,
+      "--label",
+      `xiryn.relay=${agentId}`,
+      "--label",
+      `xiryn.install=${installId()}`,
+      "--label",
+      `xiryn.until=${until}`,
+      "--network",
+      networkName,
+      "--memory",
+      "256m",
+      "--cpus",
+      "0.5",
+      "--pids-limit",
+      "256",
+      "--entrypoint",
+      "timeout",
+      imageTag(),
+      String(minutes * 60),
+      "sh",
+      "-c",
+      'websockify --web /usr/share/novnc 6080 "$0:5900" >/dev/null 2>&1 & exec cloudflared tunnel --no-autoupdate --url http://localhost:6080',
+      address,
+    ],
+    { timeoutMs: 30_000 }
+  )
+
+  for (let i = 0; i < 80; i++) {
+    const origin = await relayAddress(name)
+    if (origin) {
+      // A brand-new address takes a few seconds to resolve. Hand it out only
+      // once it answers from the internet: a phone that tries too early can
+      // remember the failure for a while. Checked from the relay, so this
+      // computer's DNS cache doesn't remember the failure either.
+      for (let j = 0; j < 40; j++) {
+        const check = await dockerRaw(
+          [
+            "exec",
+            name,
+            "curl",
+            "-s",
+            "-o",
+            "/dev/null",
+            "-m",
+            "5",
+            "-w",
+            "%{http_code}",
+            `${origin}/xiryn.html`,
+          ],
+          { timeoutMs: 10_000, maxBytes: 64 }
+        ).catch(() => null)
+        if (check?.stdout.toString() === "200") break
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+      return { origin, until }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  await dockerRaw(["rm", "--force", name], { timeoutMs: 20_000 })
+  throw new Error("Couldn't open a tunnel to the desktop.")
 }
 
 /* ──────────────────────────── status ──────────────────────────── */
@@ -737,6 +853,7 @@ export async function stopWorkstation(agentId: string) {
 // Removes the machine and its home folder
 export async function deleteWorkstation(agentId: string) {
   shared.recent.delete(agentId)
+  await dockerRaw(["rm", "--force", relayName(agentId)], { timeoutMs: 20_000 })
   await dockerRaw(["rm", "--force", "--volumes", containerName(agentId)], {
     timeoutMs: 60_000,
   })
