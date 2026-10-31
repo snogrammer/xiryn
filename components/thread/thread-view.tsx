@@ -500,7 +500,6 @@ function EmptyThread({
 
 export function ThreadView(props: ThreadViewProps) {
   const { threadId, kind, members, initialMessages } = props
-  const router = useRouter()
   const { status } = useWorkspace()
   const [addresseeId, setAddresseeId] = React.useState(members[0]?.id)
   const [refreshKey, setRefreshKey] = React.useState(0)
@@ -546,7 +545,7 @@ export function ThreadView(props: ThreadViewProps) {
       // The server settles the run (ledger, preview) just after the last chunk
       setTimeout(() => {
         setRefreshKey((key) => key + 1)
-        router.refresh()
+        refresh()
       }, 700)
     },
   })
@@ -555,7 +554,7 @@ export function ThreadView(props: ThreadViewProps) {
 
   // A turn that starts elsewhere (Telegram, an answer to a request) shows up
   // here live: catch up with what's saved, then follow the stream
-  const { listen } = useNotifications()
+  const { listen, refresh } = useNotifications()
   const busyRef = React.useRef(busy)
   React.useEffect(() => {
     busyRef.current = busy
@@ -584,12 +583,12 @@ export function ThreadView(props: ThreadViewProps) {
       { body: { agentId: addressee?.id } }
     )
     // Let the sidebar pick up the new title and the busy indicator
-    setTimeout(() => router.refresh(), 400)
+    refresh()
   }
 
   const halt = () => {
     stop()
-    fetch(api, { method: "DELETE" }).finally(() => router.refresh())
+    fetch(api, { method: "DELETE" }).finally(refresh)
   }
 
   /* Take-over: the person borrows the agent's desktop; the agent pauses */
@@ -622,7 +621,7 @@ export function ThreadView(props: ThreadViewProps) {
       { text, metadata: { handback: note ? { note } : {} } },
       { body: { agentId: addressee?.id } }
     )
-    setTimeout(() => router.refresh(), 400)
+    refresh()
   }
 
   // Answers to a payment approval or a request for a detail
@@ -638,7 +637,7 @@ export function ThreadView(props: ThreadViewProps) {
       },
       { body: { agentId: addressee?.id } }
     )
-    setTimeout(() => router.refresh(), 400)
+    refresh()
   }
 
   const takeoverControl = React.useMemo(
