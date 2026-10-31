@@ -26,7 +26,8 @@ const SERVICE = "xiryn-vault"
 // One key per installation, so two copies of Xiryn don't share one
 const ACCOUNT = createHash("sha256").update(DB_PATH).digest("hex").slice(0, 16)
 
-export type KeySource = "env" | "keychain" | "dpapi" | "secret-service" | "file"
+export type KeySource =
+  "env" | "secret" | "keychain" | "dpapi" | "secret-service" | "file" | "data-file"
 
 export class VaultLockedError extends Error {
   name = "VaultLockedError"
@@ -53,9 +54,28 @@ const run = (
 
 const keyFileDir =
   process.env.XIRYN_VAULT_KEY_DIR ||
-  // In a container the home folder doesn't survive; the data volume does
+  // In a container the home folder doesn't survive; the data volume does.
+  // The compose and Portainer files give the key a volume of its own
+  // (XIRYN_VAULT_KEY_DIR), so a copy of the data isn't a copy of the key.
   (fs.existsSync("/.dockerenv") ? DATA_DIR : path.join(os.homedir(), ".xiryn"))
 const keyFile = path.join(keyFileDir, `vault-${ACCOUNT}.key`)
+const keyBesideData = path.resolve(keyFileDir) === path.resolve(DATA_DIR)
+// Where Docker installs kept the key before it had a volume of its own
+const legacyKeyFile = path.join(DATA_DIR, `vault-${ACCOUNT}.key`)
+// A Docker secret (or any file only Xiryn can read), never written to
+const secretFile =
+  process.env.XIRYN_VAULT_KEY_FILE ||
+  (fs.existsSync("/run/secrets/xiryn_vault_key") ? "/run/secrets/xiryn_vault_key" : null)
+
+// Moves a key kept beside the database into its own directory, once
+function moveLegacyKey() {
+  if (keyBesideData || fs.existsSync(keyFile) || !fs.existsSync(legacyKeyFile)) return
+  fs.mkdirSync(keyFileDir, { recursive: true, mode: 0o700 })
+  fs.copyFileSync(legacyKeyFile, keyFile)
+  fs.chmodSync(keyFile, 0o600)
+  fs.rmSync(legacyKeyFile)
+  console.log(`[xiryn] moved the vault key out of the data folder, to ${keyFileDir}`)
+}
 const dpapiFile = path.join(DATA_DIR, "vault.key.dpapi")
 
 type Store = {
@@ -73,6 +93,14 @@ const stores: Store[] = [
     read: () => process.env.XIRYN_VAULT_KEY?.trim() || null,
     write: () => false,
   },
+  {
+    source: "secret",
+    read: () =>
+      secretFile && fs.existsSync(secretFile)
+        ? fs.readFileSync(secretFile, "utf8").trim() || null
+        : null,
+    write: () => false,
+  },
   ...(process.platform === "darwin"
     ? [
         {
@@ -88,19 +116,14 @@ const stores: Store[] = [
             ])
             return result.status === 0 ? result.stdout.trim() || null : null
           },
+          // Through `security -i` on stdin, so the key never appears on a
+          // command line where other processes could see it
           write: (base64: string) =>
-            run("security", [
-              "add-generic-password",
-              "-U",
-              "-s",
-              SERVICE,
-              "-a",
-              ACCOUNT,
-              "-l",
-              "Xiryn vault",
-              "-w",
-              base64,
-            ]).status === 0,
+            run(
+              "security",
+              ["-i"],
+              `add-generic-password -U -s ${SERVICE} -a ${ACCOUNT} -l "Xiryn vault" -w ${base64}\n`
+            ).status === 0,
         },
       ]
     : []),
@@ -161,9 +184,13 @@ const stores: Store[] = [
       ]
     : []),
   {
-    source: "file",
-    read: () =>
-      fs.existsSync(keyFile) ? fs.readFileSync(keyFile, "utf8").trim() || null : null,
+    source: keyBesideData ? "data-file" : "file",
+    read: () => {
+      moveLegacyKey()
+      return fs.existsSync(keyFile)
+        ? fs.readFileSync(keyFile, "utf8").trim() || null
+        : null
+    },
     write: (base64: string) => {
       fs.mkdirSync(keyFileDir, { recursive: true, mode: 0o700 })
       fs.writeFileSync(keyFile, base64, { mode: 0o600 })

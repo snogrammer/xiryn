@@ -5,6 +5,8 @@ services:
     container_name: xiryn
     restart: unless-stopped
     env_file: .env
+    environment:
+      XIRYN_VAULT_KEY_DIR: /app/keys
     # Talking to Docker needs access to its socket, which is root-only on
     # most hosts. (Access to the socket is root-equivalent either way.)
     user: root
@@ -13,8 +15,12 @@ services:
       - "127.0.0.1:6796:6796"
     volumes:
       - xiryn-data:/app/data
+      # The vault's key, in a volume of its own so a copy of the data isn't
+      # a copy of the key (see XIRYN_VAULT_KEY_DIR above)
+      - xiryn-keys:/app/keys
       # Agents' workstations run as sibling containers on the host's Docker
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   xiryn-data:
+  xiryn-keys:
