@@ -36,6 +36,7 @@ import {
   type ToolEnv,
 } from "@/lib/agent/tools"
 import { getMaxSteps, getTurnTimeoutMinutes } from "@/lib/config"
+import { safeError } from "@/lib/log"
 import { externalizeScreens, screenOf } from "@/lib/screens"
 import { emit, previewText } from "@/lib/events"
 import { parseModelSpec } from "@/lib/providers/catalog"
@@ -631,7 +632,12 @@ export async function startTurn({
       ...(channel === "telegram" && { via: "telegram" as const }),
       ...(routine && { routine }),
       ...(message.metadata?.handback && { handback: message.metadata.handback }),
-      ...(message.metadata?.vault && { vault: message.metadata.vault }),
+      ...(message.metadata?.vault && {
+        vault: {
+          action: message.metadata.vault.action,
+          summary: message.metadata.vault.summary,
+        },
+      }),
     },
   }
   saveMessage(threadId, userMessage)
@@ -853,7 +859,7 @@ export async function startTurn({
       },
       onError: ({ error }) => {
         failure = describeError(error)
-        console.error(`[xiryn] turn failed in thread ${threadId}:`, error)
+        console.error(`[xiryn] turn failed in thread ${threadId}:`, safeError(error))
       },
     })
 
@@ -881,7 +887,7 @@ export async function startTurn({
         },
         onError: ({ error }) => {
           failure = describeError(error)
-          console.error(`[xiryn] turn failed in thread ${threadId}:`, error)
+          console.error(`[xiryn] turn failed in thread ${threadId}:`, safeError(error))
         },
       })
     })

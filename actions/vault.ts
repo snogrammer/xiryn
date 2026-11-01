@@ -13,7 +13,12 @@ import {
   vaultKeySource,
   type VaultKind,
 } from "@/lib/vault"
-import { answerPayment, answerSecret, type PaymentChoice } from "@/lib/vault-requests"
+import {
+  answerPayment,
+  answerSecret,
+  signMarker,
+  type PaymentChoice,
+} from "@/lib/vault-requests"
 
 // The browser only ever receives labels and masked hints. Values travel one
 // way: from a form into the encrypted vault.
@@ -88,7 +93,7 @@ export async function decidePayment(approvalId: string, choice: PaymentChoice) {
       provided: "Done",
     }[answer.marker.action]
     await closePaymentNotice(approvalId, `${outcome} · ${answer.marker.summary}`)
-    return { ok: true as const, ...answer }
+    return { ok: true as const, ...answer, marker: signMarker(answer.marker) }
   } catch (error) {
     return { ok: false as const, error: reason(error) }
   }
@@ -103,7 +108,7 @@ export async function provideSecret(
   try {
     const { item, text, marker } = answerSecret(kind, data, options)
     if (options.save) revalidatePath("/settings")
-    return { ok: true as const, hint: item.hint, text, marker }
+    return { ok: true as const, hint: item.hint, text, marker: signMarker(marker) }
   } catch (error) {
     return { ok: false as const, error: reason(error) }
   }
