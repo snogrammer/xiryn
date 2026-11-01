@@ -231,9 +231,7 @@ const UserMessage = React.memo(function UserMessage({
   return (
     <div className="flex justify-end">
       <div className="flex max-w-[85%] flex-col items-end gap-1">
-        {(addressee ||
-          message.metadata?.via === "telegram" ||
-          message.metadata?.routine) && (
+        {(addressee || message.metadata?.via || message.metadata?.routine) && (
           <span className="flex items-center gap-1.5 font-mono text-[10.5px] text-muted-foreground">
             {message.metadata?.routine && (
               <span className="flex items-center gap-1 text-rigel">
@@ -241,9 +239,9 @@ const UserMessage = React.memo(function UserMessage({
                 {message.metadata.routine.name}
               </span>
             )}
-            {message.metadata?.via === "telegram" && (
+            {message.metadata?.via && (
               <span className="flex items-center gap-1 text-rigel">
-                <SendIcon className="size-3" /> via telegram
+                <SendIcon className="size-3" /> via {message.metadata.via}
               </span>
             )}
             {addressee && (

@@ -409,7 +409,8 @@ Every setting can come from `.env` **or** from **Settings** in the app. Values s
 | `XIRYN_WORKSTATION_AUTO_STOP_MINUTES`, `XIRYN_WORKSTATION_AUTO_DELETE_MINUTES` | Idle stop; disposable machines |
 | `XIRYN_PHONE_TAKEOVER` | `off` leaves the phone link out of Telegram hand-offs |
 | `FIRECRAWL_API_KEY` | Web search and reading |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_ID` | Remote access |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_ID` | Remote access from Telegram ([docs/telegram.md](docs/telegram.md)) |
+| `DISCORD_BOT_TOKEN`, `DISCORD_OWNER_ID` | Remote access from Discord ([docs/discord.md](docs/discord.md)) |
 | `XIRYN_TELEGRAM_NOTIFY` | Telegram notice when a task finishes: `long` (a minute or more, default), `all` or `off` |
 | `XIRYN_DATA_DIR`, `XIRYN_ALLOWED_HOSTS` | Data location; extra hostnames behind your own proxy |
 | `XIRYN_URL` | Where you open Xiryn, for links in Telegram hand-offs |

@@ -59,6 +59,8 @@ export async function register() {
   startMaintenance()
 
   // Resume the Telegram bridge if a bot token is configured
+  const { syncDiscord } = await import("./lib/discord/bridge")
+  syncDiscord()
   const { syncTelegram } = await import("./lib/telegram/bridge")
   syncTelegram()
 

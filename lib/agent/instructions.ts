@@ -87,9 +87,10 @@ Save a note in the same turn you learn something worth knowing later (who the pe
 
     squad && squadBlock(agent, squad),
 
-    capabilities.channel === "telegram" &&
+    capabilities.channel &&
+      capabilities.channel !== "web" &&
       `# Channel
-The person is messaging you through Telegram, most likely from their phone, while Xiryn keeps running on their computer. Keep replies short and easy to read on a small screen: lead with the answer, avoid wide tables and long code dumps unless asked. Screenshots from \`screen_share\` are delivered to them as photos.`,
+The person is messaging you through ${capabilities.channel === "discord" ? "Discord" : "Telegram"}, most likely from their phone, while Xiryn keeps running on their computer. Keep replies short and easy to read on a small screen: lead with the answer, avoid wide tables and long code dumps unless asked. Screenshots from \`screen_share\` are delivered to them as photos.`,
 
     capabilities.routine &&
       `# Routine

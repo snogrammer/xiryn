@@ -183,11 +183,11 @@ function Cards({ onOpen }: { onOpen: (href: string) => void }) {
                   )}
                 />
                 <span className={tone.text}>{data.status}</span>
-                {data.via === "telegram" && (
+                {data.via !== "web" && (
                   <>
                     <span className="text-faint">·</span>
                     <SendIcon className="size-2.5" />
-                    via telegram
+                    via {data.via}
                   </>
                 )}
               </span>

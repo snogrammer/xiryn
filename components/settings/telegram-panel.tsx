@@ -26,7 +26,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
-function Step({
+export function Step({
   n,
   title,
   done,
@@ -67,7 +67,7 @@ function Step({
   )
 }
 
-function Code({ children }: { children: React.ReactNode }) {
+export function Code({ children }: { children: React.ReactNode }) {
   return (
     <code className="rounded-sm bg-muted px-1 py-px font-mono text-[12px] text-foreground">
       {children}
