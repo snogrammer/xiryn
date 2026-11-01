@@ -35,6 +35,9 @@ services:
       XIRYN_DESKTOP_NOTIFY: "off"
       # Updates come from pulling a newer image, not from the in-app button
       XIRYN_UPDATE_CHECK: "off"
+      # ── Error reporting ── Sentry or Bugsink; off unless a DSN is set
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       # The vault's key lives in its own volume (below), not beside the database
       XIRYN_VAULT_KEY_DIR: /app/keys
     volumes:

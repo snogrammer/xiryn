@@ -13,6 +13,7 @@ import {
 import { startTurn, subscribe, TurnError } from "@/lib/agent/runtime"
 import type { XirynMessage } from "@/lib/agent/tools"
 import { nextRun } from "@/lib/schedule"
+import { reportError } from "@/lib/report"
 
 // Runs routines when they're due. Xiryn has to be running for that: a run
 // missed by a few hours (the computer was asleep) still happens when it's
@@ -205,7 +206,7 @@ async function tick() {
       continue
     }
     runRoutine(routine).catch((error) =>
-      console.error(`[xiryn] routine "${routine.name}" failed:`, error)
+      reportError("routine", error, { routineId: routine.id })
     )
   }
 }
@@ -223,8 +224,8 @@ export function startRoutines() {
     .where(eq(routines.lastStatus, "running"))
     .run()
   state.timer = setInterval(() => {
-    tick().catch((error) => console.error("[xiryn] routines:", error))
+    tick().catch((error) => reportError("routines", error))
   }, TICK)
   state.timer.unref?.()
-  tick().catch((error) => console.error("[xiryn] routines:", error))
+  tick().catch((error) => reportError("routines", error))
 }

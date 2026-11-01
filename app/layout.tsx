@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { sentryOptions } from "@/lib/report"
 
 // Fonts ship with the app (npm, SIL OFL); nothing is fetched from a font CDN
 const inter = localFont({
@@ -47,6 +48,13 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const options = sentryOptions()
+  const sentry = options && {
+    dsn: options.dsn,
+    environment: options.environment,
+    release: options.release,
+    tracesSampleRate: options.tracesSampleRate,
+  }
   return (
     <html
       lang="en"
@@ -55,6 +63,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       {/* Browser extensions add attributes to <body> before React loads */}
       <body suppressHydrationWarning>
+        {/* Error reporting settings for the browser, only when it's on */}
+        {sentry && (
+          <script
+            id="xiryn-sentry"
+            type="application/json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(sentry).replace(/</g, "\\u003c"),
+            }}
+          />
+        )}
         <ThemeProvider>
           <TooltipProvider delay={300}>{children}</TooltipProvider>
           <Toaster />

@@ -36,7 +36,6 @@ import {
   type ToolEnv,
 } from "@/lib/agent/tools"
 import { getMaxSteps, getTurnTimeoutMinutes } from "@/lib/config"
-import { safeError } from "@/lib/log"
 import { externalizeScreens, screenOf } from "@/lib/screens"
 import { emit, previewText } from "@/lib/events"
 import { parseModelSpec } from "@/lib/providers/catalog"
@@ -45,6 +44,7 @@ import { createModel, resolveModelSpec } from "@/lib/providers/registry"
 import { budgetBlock, getCustomPrices } from "@/lib/spend"
 import { isWebConfigured } from "@/lib/web"
 import { isWorkstationConfigured } from "@/lib/workstation"
+import { reportError } from "@/lib/report"
 
 /* ───────────────────────────── runs ───────────────────────────────
  * A run is one agent turn executing inside this process. Its output is
@@ -859,7 +859,7 @@ export async function startTurn({
       },
       onError: ({ error }) => {
         failure = describeError(error)
-        console.error(`[xiryn] turn failed in thread ${threadId}:`, safeError(error))
+        reportError("turn failed", error, { threadId })
       },
     })
 
@@ -887,7 +887,7 @@ export async function startTurn({
         },
         onError: ({ error }) => {
           failure = describeError(error)
-          console.error(`[xiryn] turn failed in thread ${threadId}:`, safeError(error))
+          reportError("turn failed", error, { threadId })
         },
       })
     })

@@ -1,6 +1,24 @@
+import type { Instrumentation } from "next"
+
 // Runs once when the Xiryn server boots
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return
+
+  // Error reporting, only when SENTRY_DSN is set (see lib/report.ts)
+  const { sentryOptions } = await import("./lib/report")
+  const sentry = sentryOptions()
+  if (sentry) {
+    const Sentry = await import("@sentry/nextjs")
+    const { DATA_COLLECTION, scrubBreadcrumb, scrubEvent } =
+      await import("./lib/sentry-scrub")
+    Sentry.init({
+      ...sentry,
+      dataCollection: DATA_COLLECTION,
+      beforeSend: scrubEvent,
+      beforeBreadcrumb: scrubBreadcrumb,
+    })
+    console.log("[xiryn] error reporting is on")
+  }
 
   // The access key every browser needs (made on first run), and the link
   // that hands it over
@@ -67,4 +85,13 @@ export async function register() {
       })
       .catch((error) => console.error("[xiryn] workstation image:", error))
   }
+}
+
+// Errors while rendering pages or handling requests, when reporting is on
+export const onRequestError: Instrumentation.onRequestError = async (...args) => {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return
+  const { sentryEnabled } = await import("./lib/report")
+  if (!sentryEnabled()) return
+  const Sentry = await import("@sentry/nextjs")
+  Sentry.captureRequestError(...args)
 }

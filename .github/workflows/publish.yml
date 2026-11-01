@@ -62,6 +62,7 @@ jobs:
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          build-args: XIRYN_IMAGE_SHA=${{ github.sha }}
           # Build provenance and a software bill of materials, attached to the image
           provenance: mode=max
           sbom: true

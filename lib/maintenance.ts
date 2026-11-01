@@ -2,6 +2,7 @@ import { lt } from "drizzle-orm"
 
 import { db } from "@/db"
 import { routineRuns } from "@/db/schema"
+import { reportError } from "@/lib/report"
 
 // Housekeeping for a server that runs for months. SQLite asks long-lived
 // connections to run `PRAGMA optimize` now and then; the WAL file only
@@ -30,7 +31,7 @@ export function startMaintenance() {
     try {
       task()
     } catch (error) {
-      console.error(`[xiryn] maintenance (${name}):`, error)
+      reportError(`maintenance (${name})`, error)
     }
   }
   safely(daily, "daily")()
