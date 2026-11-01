@@ -17,6 +17,7 @@ import {
   stopWorkstation,
 } from "@/lib/workstation"
 import { buildImage, getImageState } from "@/lib/workstation-image"
+import { reportError } from "@/lib/report"
 
 function reason(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -93,8 +94,6 @@ export async function startDocker() {
 
 // Starts a build and returns right away; progress comes from dockerStatus()
 export async function buildWorkstationImage() {
-  buildImage().catch((error) =>
-    console.error("[xiryn] workstation image build failed:", error)
-  )
+  buildImage().catch((error) => reportError("workstation image build", error))
   return dockerStatus()
 }

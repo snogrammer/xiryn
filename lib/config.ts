@@ -37,6 +37,11 @@ const integrationSettings = {
   // "off" leaves the phone link out of Telegram hand-off notices
   "workstation.phoneLinks": { env: "XIRYN_PHONE_TAKEOVER", fallback: "on" },
   "workstation.installId": { env: null, internal: true },
+  // Error reporting to Sentry or a self-hosted Bugsink; off without a DSN
+  "sentry.dsn": { env: "SENTRY_DSN" },
+  "sentry.environment": { env: "SENTRY_ENVIRONMENT" },
+  "sentry.release": { env: "SENTRY_RELEASE" },
+  "sentry.tracesSampleRate": { env: "SENTRY_TRACES_SAMPLE_RATE", fallback: "0" },
   // Days a screenshot is kept on disk; 0 keeps them as long as their thread
   "screens.retentionDays": { env: "XIRYN_SCREENSHOT_DAYS", fallback: "30" },
   // When screenshots saved inside messages were moved to disk

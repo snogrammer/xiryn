@@ -14,6 +14,7 @@ import {
   type RunOptions,
 } from "@/lib/docker"
 import { ensureImage, imageTag } from "@/lib/workstation-image"
+import { reportError } from "@/lib/report"
 
 // Each agent owns a workstation: a Docker container on this computer with a
 // shell, a home folder that persists, and a graphical desktop with a browser.
@@ -1053,7 +1054,7 @@ export function startWorkstationJanitor() {
     try {
       await sweepWorkstations()
     } catch (error) {
-      console.error("[xiryn] workstation cleanup failed:", error)
+      reportError("workstation cleanup", error)
     } finally {
       shared.sweeping = false
     }

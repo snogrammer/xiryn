@@ -401,6 +401,7 @@ Every setting can come from `.env` **or** from **Settings** in the app. Values s
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `XAI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY` | Hosted model providers |
 | `OLLAMA_BASE_URL`, `LMSTUDIO_BASE_URL`, `CUSTOM_BASE_URL` | Local runtimes and any OpenAI-compatible API |
 | `XIRYN_DEFAULT_MODEL`, `XIRYN_MAX_STEPS` | Default `provider/model`, max tool calls per turn |
+| `SENTRY_DSN` (and `SENTRY_ENVIRONMENT`, …) | Optional error reporting to Sentry or Bugsink, off when unset; see [docs/observability.md](docs/observability.md) |
 | `XIRYN_SCREENSHOT_DAYS` | Days screenshots are kept in `data/screens/` (default 30, `0` for as long as their thread) |
 | `XIRYN_TURN_TIMEOUT_MINUTES` | Minutes a turn may run before it's stopped as failed (default 30, `0` for no limit) |
 | `XIRYN_MONTHLY_BUDGET` | Dollars a month for paid models; once spent they wait for the 1st (local models keep working) |

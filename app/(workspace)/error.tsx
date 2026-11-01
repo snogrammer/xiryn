@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { reportClientError } from "@/lib/sentry-client"
 
 export default function WorkspaceError({
   error,
@@ -14,6 +15,7 @@ export default function WorkspaceError({
 }) {
   useEffect(() => {
     console.error(error)
+    reportClientError(error)
   }, [error])
 
   return (

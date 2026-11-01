@@ -35,6 +35,7 @@ import {
   type TgUser,
 } from "@/lib/telegram/api"
 import { markdownToTelegramHtml, plainText, splitMarkdown } from "@/lib/telegram/format"
+import { reportError } from "@/lib/report"
 
 /* ────────────────────────────────────────────────────────────────────
  * Remote access over Telegram.
@@ -282,7 +283,7 @@ function enqueue(token: string, update: TgUpdate) {
     .then(async () => {
       await handle(token, update)
     })
-    .catch((error: unknown) => console.error("[xiryn] telegram: update failed:", error))
+    .catch((error: unknown) => reportError("telegram update", error))
   state.queues.set(chatId, next)
   void next.finally(() => {
     if (state.queues.get(chatId) === next) state.queues.delete(chatId)
