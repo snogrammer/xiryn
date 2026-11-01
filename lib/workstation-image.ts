@@ -38,8 +38,14 @@ function fingerprint() {
 
 let cachedTag: { at: number; tag: string } | null = null
 
+// The fingerprint reads every file under ./workstation. Under `next start`
+// that folder can't change, so it's computed once; in dev it's rechecked
+// every 10 seconds so edits are picked up.
 export function imageTag() {
-  if (!cachedTag || Date.now() - cachedTag.at > 10_000) {
+  if (
+    !cachedTag ||
+    (process.env.NODE_ENV !== "production" && Date.now() - cachedTag.at > 10_000)
+  ) {
     cachedTag = { at: Date.now(), tag: `${IMAGE_REPO}:${fingerprint()}` }
   }
   return cachedTag.tag

@@ -1,6 +1,6 @@
 import { cache } from "react"
 import { format } from "date-fns"
-import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm"
 import type { SQLiteTable } from "drizzle-orm/sqlite-core"
 
 import { db, DB_PATH } from "@/db"
@@ -484,11 +484,13 @@ export type UsageData = ReturnType<typeof getUsage>
 
 const RUNS_SHOWN = 20
 
-// A routine's latest runs, with what each cost from the ledger
-function routineHistory(routineId: string) {
-  return db
+// Every routine's latest runs, with what each cost from the ledger, in one
+// query (the page refreshes every few seconds while a routine runs)
+function routineHistories() {
+  const ranked = db
     .select({
       id: routineRuns.id,
+      routineId: routineRuns.routineId,
       trigger: routineRuns.trigger,
       status: routineRuns.status,
       detail: routineRuns.detail,
@@ -498,37 +500,61 @@ function routineHistory(routineId: string) {
       turnId: routineRuns.turnId,
       model: turns.model,
       costMicros: turns.costMicros,
+      rank: sql<number>`row_number() over (partition by ${routineRuns.routineId} order by ${routineRuns.startedAt} desc)`.as(
+        "rank"
+      ),
     })
     .from(routineRuns)
     .leftJoin(turns, eq(turns.id, routineRuns.turnId))
-    .where(eq(routineRuns.routineId, routineId))
-    .orderBy(desc(routineRuns.startedAt))
-    .limit(RUNS_SHOWN)
-    .all()
-    .map((run) => ({
-      id: run.id,
-      trigger: run.trigger,
-      status: run.status,
-      detail: run.detail,
-      // A missed run is shown at the time it was due
-      at: (run.status === "skipped" && run.dueAt
-        ? run.dueAt
-        : run.startedAt
-      ).toISOString(),
-      durationMs:
-        run.status !== "skipped" && run.finishedAt
-          ? run.finishedAt.getTime() - run.startedAt.getTime()
-          : null,
-      cost: run.turnId
-        ? {
-            usd: run.costMicros === null ? null : fromMicros(run.costMicros),
-            free: !!run.model && isFree(run.model),
-          }
+    .as("ranked")
+  const byRoutine = new Map<string, ReturnType<typeof historyEntry>[]>()
+  for (const run of db
+    .select()
+    .from(ranked)
+    .where(lte(ranked.rank, RUNS_SHOWN))
+    .orderBy(desc(ranked.startedAt))
+    .all()) {
+    const list = byRoutine.get(run.routineId) ?? []
+    list.push(historyEntry(run))
+    byRoutine.set(run.routineId, list)
+  }
+  return byRoutine
+}
+
+function historyEntry(run: {
+  id: string
+  trigger: "schedule" | "manual"
+  status: string
+  detail: string | null
+  dueAt: Date | null
+  startedAt: Date
+  finishedAt: Date | null
+  turnId: string | null
+  model: string | null
+  costMicros: number | null
+}) {
+  return {
+    id: run.id,
+    trigger: run.trigger,
+    status: run.status,
+    detail: run.detail,
+    // A missed run is shown at the time it was due
+    at: (run.status === "skipped" && run.dueAt ? run.dueAt : run.startedAt).toISOString(),
+    durationMs:
+      run.status !== "skipped" && run.finishedAt
+        ? run.finishedAt.getTime() - run.startedAt.getTime()
         : null,
-    }))
+    cost: run.turnId
+      ? {
+          usd: run.costMicros === null ? null : fromMicros(run.costMicros),
+          free: !!run.model && isFree(run.model),
+        }
+      : null,
+  }
 }
 
 export function getRoutines() {
+  const histories = routineHistories()
   const totals = new Map(
     db
       .select({
@@ -566,7 +592,7 @@ export function getRoutines() {
           : routine.lastStatus,
       lastError: routine.lastError,
       href: threadHref(routine),
-      history: routineHistory(routine.id),
+      history: histories.get(routine.id) ?? [],
       totals: {
         runs: totals.get(routine.id)?.runs ?? 0,
         skipped: totals.get(routine.id)?.skipped ?? 0,

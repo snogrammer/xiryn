@@ -884,6 +884,9 @@ export type WorkstationStatus =
       since: string | null
     }
 
+// Disk use of each running workstation, measured at most once a minute
+const diskUse = new Map<string, { at: number; bytes: number | null }>()
+
 // Looks without starting anything
 export async function getWorkstationStatus(agentId: string): Promise<WorkstationStatus> {
   const engine = engineSnapshot() ?? { state: "missing" as const }
@@ -904,8 +907,15 @@ export async function getWorkstationStatus(agentId: string): Promise<Workstation
   const running = found.status === "running"
   let diskBytes: number | null = null
   if (running) {
-    const du = await dockerRaw(["exec", name, "du", "-sxb", HOME], { timeoutMs: 8_000 })
-    if (du.exitCode === 0) diskBytes = Number(du.stdout.toString().split("\t")[0]) || null
+    // `du` walks the whole home folder; the panel asks after every turn
+    const cached = diskUse.get(agentId)
+    if (cached && Date.now() - cached.at < 60_000) diskBytes = cached.bytes
+    else {
+      const du = await dockerRaw(["exec", name, "du", "-sxb", HOME], { timeoutMs: 8_000 })
+      if (du.exitCode === 0)
+        diskBytes = Number(du.stdout.toString().split("\t")[0]) || null
+      diskUse.set(agentId, { at: Date.now(), bytes: diskBytes })
+    }
   }
   return {
     state: running ? "running" : found.status === "restarting" ? "starting" : "stopped",

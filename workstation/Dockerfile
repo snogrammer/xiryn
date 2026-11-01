@@ -24,7 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      xvfb x11vnc novnc websockify xdotool scrot x11-utils x11-xserver-utils dbus-x11 \
+      xvfb x11vnc novnc websockify xdotool xprintidle scrot x11-utils x11-xserver-utils dbus-x11 \
       xfwm4 xfce4-panel xfce4-settings xfconf xfce4-terminal thunar \
       adwaita-icon-theme gnome-themes-extra feh \
       chromium fonts-noto-core fonts-noto-color-emoji fonts-liberation fonts-dejavu-core \

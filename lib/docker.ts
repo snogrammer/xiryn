@@ -210,7 +210,9 @@ export type EngineState =
   | { state: "stopped"; canStart: boolean; detail: string }
   | { state: "ready"; version: string; os: string; cpus: number; memoryBytes: number }
 
-const STALE_MS = 15_000
+// How old Docker's status may get before it's looked up again; it's read on
+// every page render, and Docker's state rarely changes minute to minute
+const STALE_MS = 60_000
 
 export function probeEngine(): Promise<EngineState> {
   shared.probing ??= (async (): Promise<EngineState> => {
