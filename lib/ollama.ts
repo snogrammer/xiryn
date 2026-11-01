@@ -5,6 +5,7 @@ import path from "node:path"
 
 import { getSetting } from "@/lib/config"
 import { getProviderMeta } from "@/lib/providers/catalog"
+import { readJson } from "@/lib/http"
 
 // Ollama on this computer: what's running, what's downloaded, and pulls.
 // Only ever talks to the Ollama endpoint configured for Xiryn (by default
@@ -95,7 +96,7 @@ export async function ollamaStatus() {
       signal: AbortSignal.timeout(5000),
       cache: "no-store",
     })
-    const json = (await tags.json()) as {
+    const json = ((await readJson(tags, 5_000_000)) ?? {}) as {
       models?: {
         name: string
         size: number
@@ -163,10 +164,19 @@ export function pullModel(model: string) {
   })
   void (async () => {
     try {
+      // A pull can take an hour on a slow line, so there's no overall limit;
+      // it fails only when Ollama goes quiet for two minutes
+      const stalled = new AbortController()
+      let quiet = setTimeout(() => stalled.abort(), 120_000)
+      const alive = () => {
+        clearTimeout(quiet)
+        quiet = setTimeout(() => stalled.abort(), 120_000)
+      }
       const response = await fetch(`${ollamaRoot()}/api/pull`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model, stream: true }),
+        signal: stalled.signal,
       })
       if (!response.ok || !response.body) {
         throw new Error(`${response.status} ${(await response.text()).slice(0, 200)}`)
@@ -178,7 +188,10 @@ export function pullModel(model: string) {
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+        alive()
         buffer += decoder.decode(value, { stream: true })
+        if (buffer.length > 1_000_000)
+          throw new Error("Ollama sent an unreadable answer.")
         const lines = buffer.split("\n")
         buffer = lines.pop() ?? ""
         for (const line of lines) {
@@ -208,6 +221,7 @@ export function pullModel(model: string) {
           })
         }
       }
+      clearTimeout(quiet)
       pulls.set(model, { model, state: "done" })
     } catch (error) {
       pulls.set(model, {

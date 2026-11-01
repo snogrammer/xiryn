@@ -1,4 +1,5 @@
 import { getSetting } from "@/lib/config"
+import { readJson } from "@/lib/http"
 
 // Web access goes through Firecrawl: search returns ranked results, fetch
 // returns any page as clean markdown. Both are off without a key.
@@ -31,7 +32,8 @@ async function firecrawl<T>(
     signal: AbortSignal.timeout(60_000),
     cache: "no-store",
   })
-  const json = (await response.json().catch(() => null)) as {
+  // A scraped page is a few hundred KB at most; anything far bigger is refused
+  const json = (await readJson(response, 20_000_000).catch(() => null)) as {
     success: boolean
     data?: T
     error?: string

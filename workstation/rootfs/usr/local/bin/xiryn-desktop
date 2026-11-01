@@ -61,8 +61,11 @@ while sleep 20; do
     kill -0 "$pid" 2>/dev/null || exit 1
   done
 
-  # Someone watching the screen or a command still running counts as activity
-  if [ -n "$(ss -Htn state established '( sport = :6080 or sport = :5900 )' 2>/dev/null)" ] \
+  # Input in the last minute (the agent's clicks and keys, or a person's
+  # through the desktop view) or a command still running counts as activity.
+  # A view left open that nobody uses doesn't keep the machine awake.
+  input_idle=$(xprintidle 2>/dev/null || echo 999999999)
+  if [ "$input_idle" -lt 60000 ] 2>/dev/null \
     || pgrep -f '^/bin/bash /usr/local/bin/xiryn-run' >/dev/null; then
     touch "$state/active"
   fi

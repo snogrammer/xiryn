@@ -4,6 +4,7 @@ import path from "node:path"
 import { getSetting } from "@/lib/config"
 import { REPOSITORY } from "@/lib/project"
 import { version } from "@/package.json"
+import { readJson } from "@/lib/http"
 
 // Whether a newer Xiryn is out, and how many stars the project has. The one
 // request Xiryn makes on its own: GitHub's public API, asked when you open
@@ -44,7 +45,7 @@ async function github<T>(route: string): Promise<{ status: number; body: T | nul
   })
   return {
     status: response.status,
-    body: response.ok ? ((await response.json()) as T) : null,
+    body: response.ok ? await readJson<T>(response, 2_000_000) : null,
   }
 }
 

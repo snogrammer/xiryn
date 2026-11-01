@@ -48,7 +48,7 @@ Severity: **High**, exploitable by a prompt-injected agent or a local attacker w
 | P6 | Medium | No retention for messages/turns/routine runs; no `PRAGMA optimize`/checkpoint/VACUUM; `data/xiryn.log` never rotates; launchd plist lacks `KeepAlive`; no SIGTERM handling. | `db/index.ts`, `scripts/background.mjs` | Fixed for [#27](https://github.com/snogrammer/xiryn/issues/27): hourly `PRAGMA optimize`, daily WAL checkpoint and 90-day routine-run pruning, crash-restarting supervisor with log rotation. Not done: thread retention, SIGTERM handling |
 | P7 | Medium-Low | Foreign-key columns without indexes; parent deletes scan child tables. | `db/schema.ts` | Fixed in [#11](https://github.com/snogrammer/xiryn/pull/11) (migration 0005) |
 | P8 | Low | Janitor could overlap itself and held timers un-`unref`'d; vault sweep lacked a `globalThis` guard; Telegram backoff fixed. | `lib/workstation.ts`, `instrumentation.ts`, `lib/agent/runtime.ts` | Fixed in [#11](https://github.com/snogrammer/xiryn/pull/11); backoff in #21 |
-| P9 | Low | Open VNC tab defeats idle stop; `du` after every turn; `docker info` every 15 s; synchronous fingerprint hashing on the request path; `getRoutines` N+1; shiki and cmdk in every bundle. | various | [#28](https://github.com/snogrammer/xiryn/issues/28) |
+| P9 | Low | Open VNC tab defeats idle stop; `du` after every turn; `docker info` every 15 s; synchronous fingerprint hashing on the request path; `getRoutines` N+1; shiki and cmdk in every bundle. | various | Fixed for [#28](https://github.com/snogrammer/xiryn/issues/28) |
 
 ## What was not found
 
