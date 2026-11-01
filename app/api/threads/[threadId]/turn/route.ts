@@ -9,25 +9,29 @@ import {
   TurnError,
 } from "@/lib/agent/runtime"
 import type { XirynMessage } from "@/lib/agent/tools"
+import { safeError } from "@/lib/log"
+import { verifyMarker } from "@/lib/vault-requests"
 
 const bodySchema = z.object({
   message: z.object({
     id: z.string().min(1).max(64),
     role: z.literal("user"),
+    // The composer sends text; anything else is dropped (unknown keys too)
     parts: z
-      .array(z.object({ type: z.string() }).loose())
+      .array(z.object({ type: z.literal("text"), text: z.string() }))
       .min(1)
       .max(32),
     // Only display markers are accepted; the rest is set by the server
     metadata: z
       .object({
         handback: z.object({ note: z.string().max(4000).optional() }).optional(),
-        // Shown as a marker in the transcript; decisions themselves are stored
-        // by the server actions that made them
+        // Shown as a marker in the transcript. Signed by the server action
+        // that recorded the decision; an unsigned or forged one is dropped
         vault: z
           .object({
             action: z.enum(["approved", "declined", "taken-over", "provided"]),
             summary: z.string().max(300),
+            sig: z.string().max(100),
           })
           .optional(),
       })
@@ -55,24 +59,30 @@ export async function POST(
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return fail("Malformed message.")
 
-  const text = parsed.data.message.parts
-    .map((part) =>
-      part.type === "text" && typeof part.text === "string" ? part.text : ""
-    )
-    .join("")
+  const { message } = parsed.data
+  const text = message.parts.map((part) => part.text).join("")
   if (!text.trim()) return fail("Message is empty.")
   if (text.length > 100_000) return fail("Message is too long.")
 
   try {
     const run = await startTurn({
       threadId,
-      message: parsed.data.message as unknown as XirynMessage,
+      message: {
+        ...message,
+        metadata: message.metadata && {
+          ...message.metadata,
+          vault:
+            message.metadata.vault && verifyMarker(message.metadata.vault)
+              ? message.metadata.vault
+              : undefined,
+        },
+      } as unknown as XirynMessage,
       agentId: parsed.data.agentId,
     })
     return createUIMessageStreamResponse({ stream: subscribe(run) })
   } catch (error) {
     if (error instanceof TurnError) return fail(error.message, error.status)
-    console.error("[xiryn] could not start turn:", error)
+    console.error("[xiryn] could not start turn:", safeError(error))
     return fail(error instanceof Error ? error.message : "Could not start the turn.", 500)
   }
 }

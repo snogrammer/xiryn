@@ -115,5 +115,6 @@ const SIGN_IN_PAGE = `<!doctype html>
 `
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  // Anchored, so only these exact assets skip the checks
+  matcher: ["/((?!_next/static/|_next/image$|favicon\\.ico$|icon\\.svg$).*)"],
 }

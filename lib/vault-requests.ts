@@ -1,3 +1,6 @@
+import { createHmac, timingSafeEqual } from "node:crypto"
+
+import { accessKey } from "@/lib/access"
 import {
   addVaultItem,
   decideApproval,
@@ -13,6 +16,26 @@ import {
 export type VaultMarker = {
   action: "approved" | "declined" | "taken-over" | "provided"
   summary: string
+  // Set by the server when the decision is made, so the page can't
+  // send a marker for a decision that never happened
+  sig?: string
+}
+
+const markerSig = (marker: VaultMarker) =>
+  createHmac("sha256", accessKey())
+    .update(`vault-marker\n${marker.action}\n${marker.summary}`)
+    .digest("base64url")
+
+// The marker the page sends with its follow-up message
+export function signMarker(marker: VaultMarker): VaultMarker {
+  return { action: marker.action, summary: marker.summary, sig: markerSig(marker) }
+}
+
+export function verifyMarker(marker: VaultMarker) {
+  if (!marker.sig) return false
+  const expected = Buffer.from(markerSig(marker))
+  const given = Buffer.from(marker.sig)
+  return expected.length === given.length && timingSafeEqual(expected, given)
 }
 
 export type PaymentChoice = { itemId: string } | "takeover" | "decline"
