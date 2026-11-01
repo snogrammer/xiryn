@@ -36,6 +36,7 @@ const builtFile = path.join(dataDir, "background-build.json")
 const keyFile = path.join(dataDir, "access.key")
 const URL = "http://127.0.0.1:6796"
 const next = path.join(root, "node_modules", "next", "dist", "bin", "next")
+const serverScript = path.join(root, "server.mjs")
 
 const command = process.argv[2] ?? "start"
 const dryRun = process.argv.includes("--dry-run")
@@ -207,7 +208,7 @@ async function supervise() {
     const startedAt = Date.now()
     server = spawn(
       process.execPath,
-      [next, "start", "--hostname", "127.0.0.1", "--port", "6796"],
+      [serverScript, "--hostname", "127.0.0.1", "--port", "6796"],
       {
         cwd: root,
         stdio: ["ignore", "pipe", "pipe"],

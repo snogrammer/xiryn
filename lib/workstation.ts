@@ -23,7 +23,6 @@ import { ensureImage, imageTag } from "@/lib/workstation-image"
 
 export const SCREEN = { width: 1280, height: 800 }
 const HOME = "/home/xiryn"
-const VNC_PORT = "6080/tcp"
 
 const containerName = (agentId: string) => `xiryn-ws-${agentId}`
 const volumeName = (agentId: string) => `xiryn-home-${agentId}`
@@ -70,7 +69,7 @@ function hostnameFor(name: string | undefined) {
 // Bumped when the flags a workstation is created with change, so existing
 // machines are recreated (home folder kept) the next time they start, the
 // way a new image does
-const CONFIG_VERSION = "2"
+const CONFIG_VERSION = "3"
 
 // Workstations share one network on which they can't reach each other
 // (inter-container traffic off); they still reach the internet
@@ -194,8 +193,6 @@ async function create(agentId: string, tag: string) {
       `TZ=${timeZone}`,
       "--volume",
       `${volumeName(agentId)}:${HOME}`,
-      "--publish",
-      `127.0.0.1::${VNC_PORT}`,
       "--shm-size",
       "1g",
       // A runaway process tree stays the agent's problem, not the computer's
@@ -217,7 +214,7 @@ async function boot(name: string) {
   await docker(["exec", name, "xiryn-ready"], { timeoutMs: 45_000 })
 }
 
-type Session = { name: string; at: number; port?: number; password?: string }
+type Session = { name: string; at: number; password?: string }
 
 const globalForWorkstations = globalThis as unknown as {
   __xirynWorkstations?: {
@@ -651,32 +648,30 @@ export function pressKey(agentId: string, key: string, modifiers: string[]) {
   return xdotool(agentId, ["key", "--clearmodifiers", combo])
 }
 
-// Where the browser's VNC client connects. The port is published on this
-// computer's loopback interface only, and the desktop asks for a password.
+// Where the browser's VNC client connects: Xiryn's own address, which
+// carries the connection to the workstation (lib/vnc.ts), so any device that
+// can open Xiryn can show the desktop. The desktop still asks for its
+// password.
 export async function getDesktopAccess(agentId: string) {
   const name = await ensureWorkstation(agentId)
   const session = shared.recent.get(agentId)
-  if (!session?.port || !session.password) {
-    const [port, env] = await Promise.all([
-      docker(["port", name, VNC_PORT]),
-      docker([
-        "inspect",
-        "--type",
-        "container",
-        "--format",
-        "{{json .Config.Env}}",
-        name,
-      ]),
+  let password = session?.password
+  if (!password) {
+    const env = await docker([
+      "inspect",
+      "--type",
+      "container",
+      "--format",
+      "{{json .Config.Env}}",
+      name,
     ])
-    const binding = port.stdout.toString().match(/127\.0\.0\.1:(\d+)/)
-    const password = (JSON.parse(env.stdout.toString()) as string[])
+    password = (JSON.parse(env.stdout.toString()) as string[])
       .find((entry) => entry.startsWith("XIRYN_VNC_PASSWORD="))
       ?.slice("XIRYN_VNC_PASSWORD=".length)
-    if (!binding || !password) throw new Error("The desktop isn't reachable yet.")
-    if (session) Object.assign(session, { port: Number(binding[1]), password })
-    return { url: `ws://127.0.0.1:${binding[1]}/websockify`, password }
+    if (!password) throw new Error("The desktop isn't reachable yet.")
+    if (session) session.password = password
   }
-  return { url: `ws://127.0.0.1:${session.port}/websockify`, password: session.password }
+  return { path: `/api/workstations/${agentId}/vnc`, password }
 }
 
 export function phoneLinksEnabled() {

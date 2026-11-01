@@ -177,6 +177,16 @@ export async function dockerRaw(args: string[], options: RunOptions = {}) {
   throw new DockerMissingError()
 }
 
+// Starts `docker <args>` as a long-running process whose stdin and stdout
+// the caller streams (the desktop view's connection, see lib/vnc.ts)
+export async function dockerSpawn(args: string[]) {
+  if (!shared.binary) await dockerRaw(["version", "--format", "{{.Client.Version}}"])
+  return spawn(shared.binary ?? "docker", args, {
+    windowsHide: true,
+    stdio: ["pipe", "pipe", "ignore"],
+  })
+}
+
 // The most useful line of what Docker printed when something failed
 export function dockerReason(stderr: string) {
   const lines = stderr

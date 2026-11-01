@@ -73,14 +73,16 @@ export function Screen({
     setState("connecting")
     setError(null)
     try {
-      const [{ url, password }, { default: Client }] = await Promise.all([
+      const [{ path, password }, { default: Client }] = await Promise.all([
         desktopAccess(agentId),
         import("@novnc/novnc"),
       ])
       if (attempt !== attemptRef.current) return
       const target = screen()
       target.replaceChildren()
-      const rfb = new Client(target, url, {
+      // Same origin as the page: Xiryn carries the connection (lib/vnc.ts)
+      const scheme = location.protocol === "https:" ? "wss" : "ws"
+      const rfb = new Client(target, `${scheme}://${location.host}${path}`, {
         credentials: { username: "", password, target: "" },
       })
       rfb.scaleViewport = true
