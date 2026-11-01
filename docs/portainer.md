@@ -118,6 +118,21 @@ GitOps / a webhook do it). Your data (database and the agents' home folders)
 lives in the `xiryn-data` volume and the workstation volumes, the vault key in
 `xiryn-keys`, and all of it is kept across updates.
 
+**Which tag.** `:latest` follows the main branch, so every merge reaches you on
+the next redeploy. For a server you'd rather change on your own schedule, set
+`XIRYN_IMAGE` to a fixed tag: `ghcr.io/snogrammer/xiryn:sha-<short>` (one
+build) or `:1.2.3` / `:1.2` (releases).
+
+**Checking an image.** Every published image is signed with the publishing
+workflow's GitHub identity and carries build provenance and an SBOM. To check
+one before deploying it:
+
+```
+cosign verify ghcr.io/snogrammer/xiryn:latest \
+  --certificate-identity-regexp '^https://github.com/snogrammer/xiryn/\.github/workflows/publish\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## Backups
 
 Back up the `xiryn-data` volume (`xiryn.db`) and, **separately**, the
