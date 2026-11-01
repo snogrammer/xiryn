@@ -67,6 +67,17 @@ const integrationSettings = {
   "telegram.offset": { env: null, internal: true },
   // JSON: which agent/squad and thread Telegram messages go to
   "telegram.target": { env: null, internal: true },
+  // The chat pairing happened in, where notices go
+  "telegram.ownerChat": { env: null, internal: true },
+  "discord.botToken": { env: "DISCORD_BOT_TOKEN", secret: true },
+  // Discord user id allowed to talk to the bot; set by pairing
+  "discord.ownerId": { env: "DISCORD_OWNER_ID" },
+  "discord.ownerName": { env: null, internal: true },
+  "discord.ownerChat": { env: null, internal: true },
+  "discord.pairCode": { env: null, internal: true },
+  "discord.pairCodeAt": { env: null, internal: true },
+  "discord.pairFailures": { env: null, internal: true },
+  "discord.target": { env: null, internal: true },
 } satisfies Record<string, SettingDef>
 
 const providerSettings = Object.fromEntries(
@@ -93,7 +104,12 @@ export function isSettingKey(key: string): key is SettingKey {
 
 // Keys the Settings screen may write
 export function isWritableSetting(key: string): key is SettingKey {
-  return isSettingKey(key) && !definitions[key].internal && key !== "telegram.ownerId"
+  return (
+    isSettingKey(key) &&
+    !definitions[key].internal &&
+    key !== "telegram.ownerId" &&
+    key !== "discord.ownerId"
+  )
 }
 
 export function isSecretSetting(key: SettingKey) {

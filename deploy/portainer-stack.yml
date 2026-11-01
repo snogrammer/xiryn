@@ -27,6 +27,7 @@ services:
       FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
       # ── Remote access
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
       # ── Server ── the address you open Xiryn at, and its hostname(s) so
       # Xiryn answers on more than localhost
       XIRYN_URL: ${XIRYN_URL:-http://127.0.0.1:6796}

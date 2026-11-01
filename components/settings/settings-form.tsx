@@ -952,9 +952,11 @@ function DesktopNotify({ enabled }: { enabled: boolean }) {
 export function SettingsForm({
   data,
   telegram,
+  discord,
 }: {
   data: SettingsData
   telegram: React.ReactNode
+  discord: React.ReactNode
 }) {
   const nav = [
     ["model", "Model"],
@@ -1063,10 +1065,19 @@ export function SettingsForm({
         <Section
           id="remote"
           kicker="06 · remote access"
-          title="Telegram"
-          description="Talk to your agents from anywhere. Xiryn polls Telegram from this machine — no public URL, no port forwarding, no tunnel."
+          title="Telegram and Discord"
+          description="Talk to your agents from anywhere. Xiryn connects out to Telegram and Discord from this machine — no public URL, no port forwarding, no tunnel. Use either or both."
         >
-          {telegram}
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <span className="label-mono">telegram</span>
+              {telegram}
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="label-mono">discord</span>
+              {discord}
+            </div>
+          </div>
         </Section>
 
         <Section
