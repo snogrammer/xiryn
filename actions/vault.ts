@@ -85,7 +85,7 @@ export async function decidePayment(approvalId: string, choice: PaymentChoice) {
   try {
     const answer = answerPayment(approvalId, choice)
     // The same request on Telegram no longer needs answering
-    const { closePaymentNotice } = await import("@/lib/telegram/bridge")
+    const { closePaymentNotice } = await import("@/lib/remote/core")
     const outcome = {
       approved: "Approved",
       declined: "Declined",

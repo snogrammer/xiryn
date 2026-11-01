@@ -12,7 +12,7 @@ export type Capabilities = {
   workstation: boolean
   web: boolean
   // Where the person is writing from this turn
-  channel?: "web" | "telegram"
+  channel?: "web" | "telegram" | "discord"
   // Set when the turn was started by a routine on a schedule
   routine?: string
 }

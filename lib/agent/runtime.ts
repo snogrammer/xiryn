@@ -578,7 +578,7 @@ export async function startTurn({
   threadId: string
   message: XirynMessage
   agentId?: string
-  channel?: "web" | "telegram"
+  channel?: "web" | "telegram" | "discord"
   routine?: { id: string; name: string }
 }) {
   if (getActiveRun(threadId)) {
@@ -629,7 +629,7 @@ export async function startTurn({
     role: "user",
     metadata: {
       ...(thread.squad && { agentId: first.id }),
-      ...(channel === "telegram" && { via: "telegram" as const }),
+      ...(channel !== "web" && { via: channel }),
       ...(routine && { routine }),
       ...(message.metadata?.handback && { handback: message.metadata.handback }),
       ...(message.metadata?.vault && {
@@ -678,10 +678,9 @@ export async function startTurn({
       via: channel,
       reason,
     })
-  // Loaded lazily: the bridge itself depends on this module
-  const bridge = () => import("@/lib/telegram/bridge")
-  const telegramFailed = (error: unknown) =>
-    console.error("[xiryn] telegram: notice failed:", error)
+  // Loaded lazily: remote control (Telegram, Discord) depends on this module
+  const bridge = () => import("@/lib/remote/core")
+  const telegramFailed = (error: unknown) => reportError("remote notice", error)
 
   const env: ToolEnv = {
     current: () => current,
@@ -984,15 +983,15 @@ export async function startTurn({
             durationMs,
             model: firstSpec,
           })
-          if (channel !== "telegram") {
-            import("@/lib/telegram/bridge")
+          {
+            import("@/lib/remote/core")
               .then(({ notifyFinished }) =>
                 notifyFinished({
                   name: current.name,
                   agentId: current.id,
                   squadId: thread.squadId,
                   threadId,
-                  // Line breaks kept, so tables and lists format on Telegram
+                  // Line breaks kept, so tables and lists format in chat apps
                   reply: reply.parts
                     .flatMap((part) => (part.type === "text" ? [part.text] : []))
                     .join("\n\n")
@@ -1000,11 +999,11 @@ export async function startTurn({
                   error: failure,
                   durationMs,
                   always: !!routine,
+                  // The chat the turn came from already has the answer
+                  except: channel,
                 })
               )
-              .catch((error) =>
-                console.error("[xiryn] telegram: finished notice failed:", error)
-              )
+              .catch((error) => reportError("remote finished notice", error))
           }
         }
       },

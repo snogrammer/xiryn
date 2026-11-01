@@ -835,7 +835,7 @@ export type XirynMetadata = {
   cost?: number | null
   durationMs?: number
   // Set on messages that arrived through Telegram
-  via?: "telegram"
+  via?: "telegram" | "discord"
   // Set on the message a routine sends when it runs
   routine?: { id: string; name: string }
   // Set on the message sent when the person hands the desktop back

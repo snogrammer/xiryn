@@ -142,7 +142,7 @@ type CardData = {
   status: string
   name: string
   glyph: string
-  via: "web" | "telegram"
+  via: "web" | "telegram" | "discord"
   href: string
   takeoverHref: string | null
   timeout: number

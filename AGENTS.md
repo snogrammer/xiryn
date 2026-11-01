@@ -39,7 +39,7 @@ npm run db:generate  # after editing db/schema.ts; commit the migration
 - Mutations go through `actions/*.ts` (`"use server"`), validated with the zod schemas exported from `db/schema.ts`.
 - Reads for server components go in `queries/`.
 - Settings: add new keys to the registry in `lib/config.ts`; never read `process.env` for user-configurable values elsewhere.
-- Tools: add to `lib/agent/tools.ts`, render in `components/thread/tool-call.tsx`, label in `lib/telegram/bridge.ts`.
+- Tools: add to `lib/agent/tools.ts`, render in `components/thread/tool-call.tsx`, label in `lib/remote/core.ts`.
 - Styling: design tokens in `app/globals.css` (`rigel` accent, `betelgeuse` secondary, `label-mono` for small caps metadata).
 - Conventional Commits.
 

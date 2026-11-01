@@ -11,7 +11,7 @@ type Common = {
   name: string
   glyph: string
   // Where the message that started the turn came from
-  via: "web" | "telegram"
+  via: "web" | "telegram" | "discord"
 }
 
 export type XirynEvent =
@@ -51,7 +51,7 @@ export function emit(event: XirynEvent) {
   }
   // Every open Xiryn tab listens; with none open, the operating system
   // shows it instead (Telegram turns are already on the person's phone)
-  if (listeners.size === 0 && event.via !== "telegram") desktopNotice(event)
+  if (listeners.size === 0 && event.via === "web") desktopNotice(event)
 }
 
 function desktopNotice(event: XirynEvent) {
