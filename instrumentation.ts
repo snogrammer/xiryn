@@ -32,6 +32,10 @@ export async function register() {
   screens.__xirynScreenSweep ??= setInterval(sweepScreens, 60 * 60_000)
   screens.__xirynScreenSweep.unref()
 
+  // The live desktop's websocket (server.mjs hands upgrades here)
+  const { handleVncUpgrade } = await import("./lib/vnc")
+  ;(globalThis as { __xirynVnc?: typeof handleVncUpgrade }).__xirynVnc = handleVncUpgrade
+
   // Database upkeep and history pruning for long uptimes
   const { startMaintenance } = await import("./lib/maintenance")
   startMaintenance()

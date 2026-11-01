@@ -97,19 +97,6 @@ Open it once on each browser or phone you use (`docker logs xiryn | grep 'sign i
 finds it again). The key lives in the data volume as `access.key`; delete it
 and restart the stack to sign every device out.
 
-## Known limitation · the live desktop on another machine
-
-Agents work fine from anywhere — they drive their workstation through Docker on
-the server. But the **live desktop view** (watching and **Take over**) connects
-your browser straight to the workstation's VNC port, which is published on the
-**server's** loopback only (`ws://127.0.0.1:<port>`). From a browser on another
-device that view won't connect. Workarounds until Xiryn proxies it itself:
-
-- Telegram hand-offs' phone takeover link (`XIRYN_PHONE_TAKEOVER`, on by
-  default) goes through a temporary Cloudflare tunnel and works from anywhere.
-- An SSH tunnel to the server, forwarding both `6796` and the workstation's
-  port (`docker port xiryn-ws-<agent>` on the server shows it).
-
 ## Updating
 
 Pull the newer image and recreate the container: in Portainer open the stack →

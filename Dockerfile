@@ -24,6 +24,7 @@ ENV NODE_ENV=production \
 
 COPY --from=build /app/package.json ./
 COPY --from=build /app/next.config.ts ./
+COPY --from=build /app/server.mjs ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
@@ -41,4 +42,4 @@ EXPOSE 6796
 # Inside the container Xiryn listens on all interfaces; publish the port to
 # 127.0.0.1 on the host (see docker-compose.yml) to keep it private.
 # Workstations are sibling containers: mount the host's Docker socket.
-CMD ["node_modules/.bin/next", "start", "--hostname", "0.0.0.0", "--port", "6796"]
+CMD ["node", "server.mjs", "--hostname", "0.0.0.0", "--port", "6796"]
