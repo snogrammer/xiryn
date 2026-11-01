@@ -13,11 +13,13 @@
 import { spawn, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import os from "node:os"
@@ -56,6 +58,10 @@ if (!workstationOnly) {
     console.log(ok(`created .env ${dim("from .env.example")}`))
   } else {
     console.log(ok(`.env exists ${dim("(left untouched)")}`))
+  }
+  // It holds API keys: readable by you only (no effect on Windows)
+  if (process.platform !== "win32" && (statSync(envPath).mode & 0o077) !== 0) {
+    chmodSync(envPath, 0o600)
   }
   mkdirSync(path.join(root, process.env.XIRYN_DATA_DIR || "data"), { recursive: true })
 }

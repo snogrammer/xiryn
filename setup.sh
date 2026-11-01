@@ -133,12 +133,26 @@ install_node_home() {
   esac
   local kind=linux
   [ "$platform" = mac ] && kind=darwin
-  file=$(curl -fsSL "https://nodejs.org/dist/latest-v$NODE_MAJOR.x/SHASUMS256.txt" |
-    awk '{print $2}' | grep -E "^node-v[0-9.]+-$kind-$arch\.tar\.gz$" | head -1)
+  local base="https://nodejs.org/dist/latest-v$NODE_MAJOR.x" sums expected actual tmp
+  sums=$(curl -fsSL "$base/SHASUMS256.txt") ||
+    fail "Couldn't reach nodejs.org. Install Node.js from https://nodejs.org."
+  file=$(printf '%s\n' "$sums" | awk '{print $2}' |
+    grep -E "^node-v[0-9.]+-$kind-$arch\.tar\.gz$" | head -1)
   [ -n "$file" ] || fail "Couldn't find a Node.js download. Install it from https://nodejs.org."
+  expected=$(printf '%s\n' "$sums" | awk -v f="$file" '$2 == f {print $1}')
+  # Checked against the published checksum before anything is unpacked
+  tmp="$(mktemp)"
+  curl -fsSL -o "$tmp" "$base/$file" || { rm -f "$tmp"; fail "Couldn't download Node.js."; }
+  if has sha256sum; then actual=$(sha256sum "$tmp" | awk '{print $1}')
+  else actual=$(shasum -a 256 "$tmp" | awk '{print $1}'); fi
+  if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+    rm -f "$tmp"
+    fail "The Node.js download didn't match its published checksum. Try again, or install it from https://nodejs.org."
+  fi
   dir="$HOME/.xiryn/node"
   rm -rf "$dir" && mkdir -p "$dir"
-  curl -fsSL "https://nodejs.org/dist/latest-v$NODE_MAJOR.x/$file" | tar -xzf - -C "$dir" --strip-components=1
+  tar -xzf "$tmp" -C "$dir" --strip-components=1
+  rm -f "$tmp"
   export PATH="$dir/bin:$PATH"
   # So new terminals find it too
   local line='export PATH="$HOME/.xiryn/node/bin:$PATH"'
@@ -147,6 +161,20 @@ install_node_home() {
       grep -qF "$line" "$profile" 2>/dev/null || printf '\n# Node.js for Xiryn\n%s\n' "$line" >>"$profile"
     fi
   done
+}
+
+# Runs an installer script from the internet as administrator, after saying
+# exactly what it is and asking (XIRYN_YES=1 answers yes)
+run_remote_script() {
+  local url="$1" shell="$2" tmp
+  note "Installing this needs a script from $url, run as administrator."
+  ask "Run it?" || needs_you "Skipped. To install it yourself, run:" "curl -fsSL $url | sudo $shell"
+  tmp="$(mktemp)"
+  curl -fsSL -o "$tmp" "$url" || { rm -f "$tmp"; fail "Couldn't download $url."; }
+  local status=0
+  ${sudo_cmd:+$sudo_cmd -E} "$shell" "$tmp" || status=$?
+  rm -f "$tmp"
+  return "$status"
 }
 
 install_node() {
@@ -167,11 +195,11 @@ install_node() {
   case "$manager" in
     apt)
       $sudo_cmd apt-get update -y && $sudo_cmd apt-get install -y ca-certificates curl
-      curl -fsSL "https://deb.nodesource.com/setup_$NODE_MAJOR.x" | ${sudo_cmd:+$sudo_cmd -E} bash -
+      run_remote_script "https://deb.nodesource.com/setup_$NODE_MAJOR.x" bash
       $sudo_cmd apt-get install -y nodejs
       ;;
     dnf)
-      curl -fsSL "https://rpm.nodesource.com/setup_$NODE_MAJOR.x" | $sudo_cmd bash -
+      run_remote_script "https://rpm.nodesource.com/setup_$NODE_MAJOR.x" bash
       $sudo_cmd dnf install -y nodejs
       ;;
     pacman) $sudo_cmd pacman -Sy --noconfirm nodejs npm ;;
@@ -207,7 +235,7 @@ install_docker() {
   fi
   can_sudo || needs_you "Installing Docker needs your password. In your own terminal, run:" \
     "curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker \$USER"
-  curl -fsSL https://get.docker.com | $sudo_cmd sh
+  run_remote_script https://get.docker.com sh
   $sudo_cmd systemctl enable --now docker 2>/dev/null || true
   if [ -n "$sudo_cmd" ]; then
     $sudo_cmd usermod -aG docker "${USER:-$(id -un)}"

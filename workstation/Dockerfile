@@ -1,11 +1,11 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # The machine every Xiryn agent works on: a Linux desktop with a real browser,
 # streamed over noVNC, plus the everyday developer tools. Xiryn builds it once
 # on your computer (`npm run setup`, or on first use) and runs one container
 # per agent from it.
 
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 
 # Downloads are verified against these digests (SHASUMS256.txt on nodejs.org,
 # the release assets' digests on GitHub). Bump the digests with the versions.
