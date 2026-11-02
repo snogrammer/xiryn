@@ -9,7 +9,7 @@ import {
   type VaultKind,
 } from "@/lib/vault"
 
-// Answers to an agent's payment approval or secret request. The app and the
+// Answers to an agent's payment or sign-in approval, or secret request. The app and the
 // Telegram bridge both use these, and both then continue the thread with the
 // returned text, which carries hints and ids only, never values.
 
@@ -77,6 +77,33 @@ export function answerPayment(approvalId: string, choice: PaymentChoice) {
   }
 }
 
+export type LoginChoice = "approve" | "takeover" | "decline"
+
+export function answerLogin(approvalId: string, choice: LoginChoice) {
+  const pending = getApproval(approvalId)
+  if (!pending || pending.kind !== "login")
+    throw new Error("That sign-in request no longer exists.")
+  const login = pending.itemId ? getVaultItem(pending.itemId) : null
+  const summary = `sign-in to ${pending.host ?? "the site"}${login ? ` · ${login.hint}` : ""}`
+
+  if (choice === "decline") {
+    decideApproval(approvalId, "declined")
+    return {
+      text: `I've declined the sign-in to ${pending.host}. Don't sign in with that login. Tell me what you'd suggest instead.`,
+      marker: { action: "declined", summary } satisfies VaultMarker,
+    }
+  }
+  if (choice === "takeover") {
+    decideApproval(approvalId, "taken-over")
+    return { text: null, marker: { action: "taken-over", summary } satisfies VaultMarker }
+  }
+  decideApproval(approvalId, "approved")
+  return {
+    text: `Approved: sign in to ${pending.host} with ${login?.hint ?? "the saved login"} (vault item ${pending.itemId}). Fill the username and password with vault_fill, once each, and finish signing in.`,
+    marker: { action: "approved", summary } satisfies VaultMarker,
+  }
+}
+
 export function answerSecret(
   kind: VaultKind,
   data: unknown,
@@ -90,7 +117,7 @@ export function answerSecret(
     text:
       kind === "code"
         ? `I've put the code in the vault as item ${item.id}. Fill it with vault_fill (field "code").`
-        : `I've added ${item.hint} to the vault as item ${item.id}${save ? ", saved for next time" : ", for this task only"}. Use it with vault_fill.`,
+        : `I've added ${item.hint} to the vault as item ${item.id}${save ? ", saved for next time" : ", for this task only"}. ${kind === "login" ? "Call request_login_approval on the sign-in page, then fill it with vault_fill." : "Use it with vault_fill."}`,
     marker: {
       action: "provided",
       summary: kind === "code" ? "one-time code" : item.hint,

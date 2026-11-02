@@ -35,7 +35,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useTakeover } from "@/components/thread/takeover"
-import { PaymentApprovalCard, SecretRequestCard } from "@/components/vault/request-cards"
+import {
+  LoginApprovalCard,
+  PaymentApprovalCard,
+  SecretRequestCard,
+} from "@/components/vault/request-cards"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import type { XirynMessage } from "@/lib/agent/tools"
@@ -125,6 +129,11 @@ const META: Record<string, Meta> = {
     icon: CreditCardIcon,
     label: "pay?",
     summary: (i) => `${str(i.amount)} to ${str(i.merchant)}`,
+  },
+  request_login_approval: {
+    icon: KeyRoundIcon,
+    label: "sign in?",
+    summary: () => "a saved login",
   },
   request_secret: { icon: KeyRoundIcon, label: "ask", summary: (i) => str(i.reason) },
 }
@@ -395,6 +404,10 @@ export function ToolCall({
   if (name === "request_payment_approval" && part.state === "output-available") {
     const output = part.output as { approvalId: string }
     return <PaymentApprovalCard approvalId={output.approvalId} awaiting={awaiting} />
+  }
+  if (name === "request_login_approval" && part.state === "output-available") {
+    const output = part.output as { approvalId: string }
+    return <LoginApprovalCard approvalId={output.approvalId} awaiting={awaiting} />
   }
   if (name === "request_secret" && part.state === "output-available") {
     const output = part.output as {

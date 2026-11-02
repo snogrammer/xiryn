@@ -71,6 +71,12 @@ export type ToolEnv = {
     approval: Approval,
     methods: VaultItemView[]
   ) => Promise<void> | void
+  // A sign-in with a saved login waiting for their decision
+  onLoginRequested?: (
+    agent: Agent,
+    approval: Approval,
+    login: VaultItemView
+  ) => Promise<void> | void
   // A detail only they can give, through a secure form
   onSecretRequested?: (agent: Agent, request: SecretRequest) => Promise<void> | void
 }
@@ -401,7 +407,7 @@ export function createVaultTools(env: ToolEnv) {
 
     vault_fill: tool({
       description:
-        "Type a value from the person's vault into a field on your desktop, without you ever seeing it. Click the field first, or pass x and y to have it clicked. A login only fills on its own site; a card or UPI ID only after the person approved the payment with request_payment_approval, only by you, only on the site they approved, and each detail once per approval. The field then shows dots. Returns no screenshot: take one with screen_capture to check the form.",
+        "Type a value from the person's vault into a field on your desktop, without you ever seeing it. Click the field first, or pass x and y to have it clicked. A login only fills on its own site after the person approved the sign-in with request_login_approval; a card or UPI ID only after they approved the payment with request_payment_approval. Either way only by you, only on the site they approved, and each detail once per approval. The field then shows dots. Returns no screenshot: take one with screen_capture to check the form.",
       inputSchema: z.object({
         id: z
           .string()
@@ -432,12 +438,18 @@ export function createVaultTools(env: ToolEnv) {
             `"${item.label}" is a login for ${item.site}, but the browser is on ${where?.host ?? "no website"}. Logins only fill on their own site.`
           )
         }
-        let paying: { id: string } | null = null
-        if (item.kind === "card" || item.kind === "upi") {
+        // Logins, cards and UPI IDs type only under the person's approval of
+        // this sign-in or payment: the site check above is read inside your
+        // own workstation, their decision isn't
+        let approved: { id: string } | null = null
+        if (item.kind === "login" || item.kind === "card" || item.kind === "upi") {
+          const login = item.kind === "login"
           const approval = activeApproval(env.threadId, item.id, agentId())
           if (!approval) {
             throw new Error(
-              "This payment method can't be used until the person approves the payment. Call request_payment_approval first."
+              login
+                ? `Signing in with "${item.label}" needs the person's approval first. Call request_login_approval on the sign-in page.`
+                : "This payment method can't be used until the person approves the payment. Call request_payment_approval first."
             )
           }
           if (!approval.host) {
@@ -447,16 +459,16 @@ export function createVaultTools(env: ToolEnv) {
           }
           if (!hostMatches(where?.host ?? null, approval.host)) {
             throw new Error(
-              `The payment was approved on ${approval.host}, but the browser is now on ${where?.host ?? "no website"}. Ask for approval again on this site.`
+              `The ${login ? "sign-in" : "payment"} was approved on ${approval.host}, but the browser is now on ${where?.host ?? "no website"}. Ask for approval again on this site.`
             )
           }
-          // One approval, one payment: each detail types once
+          // One approval, one sign-in or payment: each detail types once
           if (approval.filled?.includes(field)) {
             throw new Error(
-              `The ${field.replace(/_/g, " ")} was already filled under this approval. An approval covers one payment; to pay again or retry, call request_payment_approval again.`
+              `The ${field.replace(/_/g, " ")} was already filled under this approval. An approval covers one ${login ? "sign-in" : "payment"}; to ${login ? "sign in" : "pay"} again or retry, call ${login ? "request_login_approval" : "request_payment_approval"} again.`
             )
           }
-          paying = approval
+          approved = approval
         }
         const value = vaultValue(item.id, field)
         if (x !== undefined && y !== undefined) {
@@ -465,13 +477,53 @@ export function createVaultTools(env: ToolEnv) {
         }
         await typeSecret(agentId(), value)
         await maskFocusedField(agentId())
-        if (paying) markApprovalField(paying.id, field)
+        if (approved) markApprovalField(approved.id, field)
         markVaultUsed(item.id)
         return {
           filled: field.replace(/_/g, " "),
           item: item.hint,
           site: where?.host ?? null,
         }
+      },
+    }),
+
+    request_login_approval: tool({
+      description:
+        "Ask the person to approve signing in with a saved login before you fill it. Call it on the site's sign-in page, with the login's vault id. They see the site, the login and a screenshot of your screen, so keep the sign-in page in front. They choose: approve (you then fill the username and password with vault_fill, once each), sign in themselves on your desktop, or decline. Your turn ends with this call; their decision arrives as a message.",
+      inputSchema: z.object({
+        id: z.string().describe("The login's vault id, from vault_list"),
+      }),
+      execute: async ({ id }) => {
+        const item = getVaultItem(id)
+        if (!item || item.kind !== "login") {
+          throw new Error("There's no saved login with that id. Check vault_list.")
+        }
+        const where = await page()
+        if (!where) {
+          throw new Error(
+            "Can't tell which website the browser is on. Bring the site's Chromium window to the front (one tab with that title), take a screen_capture, and try again."
+          )
+        }
+        if (!hostMatches(where.host, item.site)) {
+          throw new Error(
+            `"${item.label}" is a login for ${item.site}, but the browser is on ${where.host}. Logins only fill on their own site.`
+          )
+        }
+        const approval = createApproval({
+          kind: "login",
+          threadId: env.threadId,
+          agentId: agentId(),
+          itemId: item.id,
+          merchant: item.label,
+          amount: "",
+          host: where.host,
+        })
+        // The person checks this before approving; it isn't returned to you
+        await captureScreen(agentId())
+          .then((shot) => saveApprovalScreen(approval.id, shot.image))
+          .catch((error) => console.error("[xiryn] sign-in screenshot:", error))
+        await env.onLoginRequested?.(env.current(), approval, item)
+        return { approvalId: approval.id, site: where.host, login: item.hint }
       },
     }),
 

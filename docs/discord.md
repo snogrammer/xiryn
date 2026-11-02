@@ -53,7 +53,9 @@ make a new one.
 While an agent works, one message lists its steps and is edited as it goes;
 the answer follows. Shared screenshots arrive as images. When an agent wants to
 pay, you get the amount, the site, a screenshot of its screen and buttons to
-approve with a saved card, pay yourself, or decline. Requests for a login or
+approve with a saved card, pay yourself, or decline. Signing in with a saved
+login works the same way: the site, the login's hint and a screenshot, with
+buttons to approve, sign in yourself, or decline. Requests for a new login or
 card details link to Xiryn on your computer; they're never typed into a chat.
 
 **One-time codes:** use `/code`. Slash commands aren't posted in the

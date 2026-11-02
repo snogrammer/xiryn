@@ -1,0 +1,1 @@
+ALTER TABLE `vault_approvals` ADD `kind` text DEFAULT 'payment' NOT NULL;
