@@ -564,8 +564,9 @@ export function sweepVault() {
 
 /* ─────────────────────────── approvals ──────────────────────────── */
 
-// How long an approved payment can be acted on
+// How long an approved payment, or an approved sign-in, can be acted on
 const APPROVAL_MS = 20 * 60_000
+const LOGIN_APPROVAL_MS = 10 * 60_000
 // How long a payment request waits for an answer
 const PENDING_MS = 30 * 60_000
 
@@ -580,8 +581,11 @@ export function isExpiredRequest(approval: Approval) {
 export type Approval = typeof vaultApprovals.$inferSelect
 
 export function createApproval(input: {
+  kind?: "payment" | "login"
   threadId: string
   agentId: string
+  // For a sign-in, the login it would use
+  itemId?: string
   merchant: string
   amount: string
   purpose?: string
@@ -590,6 +594,8 @@ export function createApproval(input: {
   const [row] = db
     .insert(vaultApprovals)
     .values({
+      kind: input.kind ?? "payment",
+      itemId: input.itemId ?? null,
       threadId: input.threadId,
       agentId: input.agentId,
       merchant: input.merchant.slice(0, 120),
@@ -646,14 +652,18 @@ export function decideApproval(
   itemId?: string | null
 ) {
   const approval = getApproval(id)
-  if (!approval) throw new Error("That payment request no longer exists.")
-  if (approval.status !== "pending") throw new Error("That payment was already decided.")
+  if (!approval) throw new Error("That request no longer exists.")
+  const what = approval.kind === "login" ? "sign-in" : "payment"
+  if (approval.status !== "pending") throw new Error(`That ${what} was already decided.`)
   if (isExpiredRequest(approval)) {
     throw new Error(
-      "That payment request expired. Ask the agent to request approval again."
+      `That ${what} request expired. Ask the agent to request approval again.`
     )
   }
-  if (decision === "approved") {
+  if (approval.kind === "login") {
+    // The login was named when the agent asked; approving can't swap it
+    itemId = approval.itemId
+  } else if (decision === "approved") {
     const item = itemId ? getVaultItem(itemId) : null
     if (!item || (item.kind !== "card" && item.kind !== "upi")) {
       throw new Error("Choose a saved card or UPI ID to pay with.")
@@ -662,17 +672,22 @@ export function decideApproval(
   db.update(vaultApprovals)
     .set({
       status: decision,
-      itemId: decision === "approved" ? itemId : null,
+      itemId: approval.kind === "login" || decision === "approved" ? itemId : null,
       decidedAt: new Date(),
-      expiresAt: decision === "approved" ? new Date(Date.now() + APPROVAL_MS) : null,
+      expiresAt:
+        decision === "approved"
+          ? new Date(
+              Date.now() + (approval.kind === "login" ? LOGIN_APPROVAL_MS : APPROVAL_MS)
+            )
+          : null,
     })
     .where(eq(vaultApprovals.id, id))
     .run()
   return getApproval(id)!
 }
 
-// The approval that lets this agent type this payment method in this
-// thread. Bound to the agent that asked, so a squad member it handed the
+// The approval that lets this agent type this payment method, or sign in
+// with this login, in this thread. Bound to the agent that asked, so a squad member it handed the
 // turn to can't pay with it.
 export function activeApproval(threadId: string, itemId: string, agentId: string) {
   return (
@@ -704,7 +719,8 @@ function hasLiveApproval(itemId: string) {
     .some((approval) => approval.expiresAt && approval.expiresAt.getTime() > Date.now())
 }
 
-// One approval pays once: each field (number, expiry, cvv…) types once
+// One approval pays (or signs in) once: each field (number, expiry, cvv,
+// username, password…) types once
 export function markApprovalField(id: string, field: string) {
   const approval = getApproval(id)
   if (!approval) return

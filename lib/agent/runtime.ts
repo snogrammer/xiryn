@@ -665,7 +665,7 @@ export async function startTurn({
     ? `/s/${thread.squadId}/${threadId}`
     : `/a/${first.id}/${threadId}`
   const attention = (
-    type: "takeover" | "payment" | "secret",
+    type: "takeover" | "payment" | "login" | "secret",
     agent: Agent,
     reason: string
   ) =>
@@ -700,6 +700,13 @@ export async function startTurn({
       )
       const { notifyPayment } = await bridge()
       await notifyPayment({ agent, squadId: thread.squadId, approval, methods }).catch(
+        telegramFailed
+      )
+    },
+    onLoginRequested: async (agent, approval, login) => {
+      attention("login", agent, `Wants to sign in to ${approval.host} with ${login.hint}`)
+      const { notifyLogin } = await bridge()
+      await notifyLogin({ agent, squadId: thread.squadId, approval, login }).catch(
         telegramFailed
       )
     },
@@ -822,11 +829,12 @@ export async function startTurn({
       messages: forProvider(firstSpec, initialMessages),
       tools,
       // The turn also ends when the agent needs the person: its screen,
-      // a payment decision or a detail only they have
+      // a payment or sign-in decision, or a detail only they have
       stopWhen: [
         isStepCount(maxSteps),
         hasToolCall("request_takeover"),
         hasToolCall("request_payment_approval"),
+        hasToolCall("request_login_approval"),
         hasToolCall("request_secret"),
       ],
       abortSignal: run.controller.signal,
@@ -961,6 +969,7 @@ export async function startTurn({
           [
             "tool-request_takeover",
             "tool-request_payment_approval",
+            "tool-request_login_approval",
             "tool-request_secret",
           ].includes(part.type)
         )

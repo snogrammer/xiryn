@@ -176,8 +176,8 @@ Agents ask when they need a decision, confirm before anything irreversible, and 
 
 - **An encrypted vault** for logins, cards, UPI IDs and personal details. Add them in **Settings → Vault**, or when an agent asks, through a secure form in the chat. They're encrypted with AES-256-GCM, and the key is held by your operating system (macOS Keychain, Windows DPAPI, the Linux Secret Service) — never next to the data.
 - **Agents never see the values.** An agent gets "Visa ···· 4242"; Xiryn types the card into the page itself and shows the field as dots.
-- **Every payment needs your yes.** At checkout the agent asks — *"Atlas wants to pay ₹19,062 to MakeMyTrip"* — and you choose **Approve** (it pays with the card you pick), **I'll pay myself** (you take over its screen) or **Decline**, in the app or with one tap on Telegram.
-- **Phishing-proof by design.** A saved login only fills on its own site; an approved card only on the site you approved.
+- **Every payment needs your yes.** At checkout the agent asks — *"Atlas wants to pay ₹19,062 to MakeMyTrip"* — and you choose **Approve** (it pays with the card you pick), **I'll pay myself** (you take over its screen) or **Decline**, in the app or with one tap on Telegram. Signing in with a saved login asks the same way, with the site and a screenshot of its screen.
+- **Phishing-proof by design.** A saved login only fills on its own site, after you approve that sign-in; an approved card only on the site you approved.
 - **Stays signed in.** Each agent's browser keeps your sessions between tasks until the site signs you out. One-time codes you reply to the Telegram bot go straight into the vault, not the chat.
 
 > **Real browsing, from your own connection.** Agents' machines run on your computer, so sites see an ordinary home connection rather than a data center — no blocked sites, far fewer CAPTCHAs.
@@ -426,7 +426,7 @@ Xiryn has no user accounts, so it's built never to be reachable by anyone but yo
 - API keys never reach the browser; the UI only sees masked values, and keys are kept out of logs.
 - Telegram answers exactly **one** paired account; pairing codes are single-use and rotate after wrong guesses.
 - Agents execute only inside their own containers — never on your desktop or in your files. Their browsers have password saving and card autofill switched off.
-- Saved logins, cards and personal details are encrypted (AES-256-GCM) with a key your operating system's keychain holds. Agents get masked hints only; Xiryn types values into pages itself, logins only on their own site, payment details only after you approve that payment.
+- Saved logins, cards and personal details are encrypted (AES-256-GCM) with a key your operating system's keychain holds. Agents get masked hints only; Xiryn types values into pages itself, logins only on their own site after you approve that sign-in, payment details only after you approve that payment.
 - Each live desktop is published on 127.0.0.1 only and asks for its own random password.
 - No telemetry. No analytics. The only request Xiryn makes on its own is an update check against GitHub's public API when you open Xiryn, sending nothing about you. Switch it off in **Settings → System** or with `XIRYN_UPDATE_CHECK=off`.
 
@@ -438,7 +438,7 @@ See [SECURITY.md](SECURITY.md) for the full model and how to report a vulnerabil
 No. Everything an agent does — commands, files, mouse, keyboard, browser — happens inside its own Docker container: a separate Linux system with its own desktop and files. It can't see your screen, files or apps, so you keep using your computer normally. It does share your CPU and memory while it works; the limits are in Settings.
 
 **Can it book a flight or order something?**
-It can do the legwork on real websites — search, compare, fill in the details — and it will ask before anything irreversible. Payments always need your approval: the agent shows you the merchant, the amount and the site, and you either let it pay with a card or UPI ID from your vault, or take over its screen and pay yourself — in the app or from your phone through Telegram. Logins work the same way: a saved login is filled for it, or you sign in on its screen once and the session stays.
+It can do the legwork on real websites — search, compare, fill in the details — and it will ask before anything irreversible. Payments always need your approval: the agent shows you the merchant, the amount and the site, and you either let it pay with a card or UPI ID from your vault, or take over its screen and pay yourself — in the app or from your phone through Telegram. Logins work the same way: you approve each sign-in with a saved login (seeing the site and its screen), or you sign in on its screen once and the session stays.
 
 **How do I delete a thread?**
 Hover it under **Recent threads** in the sidebar and click the trash icon, or open the thread menu (⋯) in its header → **Delete thread**. The agent, its memory and its workstation stay.

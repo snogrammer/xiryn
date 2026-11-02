@@ -14,9 +14,11 @@ import {
   type VaultKind,
 } from "@/lib/vault"
 import {
+  answerLogin,
   answerPayment,
   answerSecret,
   signMarker,
+  type LoginChoice,
   type PaymentChoice,
 } from "@/lib/vault-requests"
 
@@ -84,15 +86,49 @@ export async function paymentRequest(approvalId: string) {
 export async function decidePayment(approvalId: string, choice: PaymentChoice) {
   try {
     const answer = answerPayment(approvalId, choice)
-    // The same request on Telegram no longer needs answering
-    const { closePaymentNotice } = await import("@/lib/remote/core")
+    // The same request on Telegram or Discord no longer needs answering
+    const { closeApprovalNotice } = await import("@/lib/remote/core")
     const outcome = {
       approved: "Approved",
       declined: "Declined",
       "taken-over": "You're paying yourself",
       provided: "Done",
     }[answer.marker.action]
-    await closePaymentNotice(approvalId, `${outcome} · ${answer.marker.summary}`)
+    await closeApprovalNotice(approvalId, `${outcome} · ${answer.marker.summary}`)
+    return { ok: true as const, ...answer, marker: signMarker(answer.marker) }
+  } catch (error) {
+    return { ok: false as const, error: reason(error) }
+  }
+}
+
+// A sign-in an agent asked to make with a saved login
+export async function loginRequest(approvalId: string) {
+  const approval = getApproval(approvalId)
+  if (!approval || approval.kind !== "login") return null
+  return {
+    id: approval.id,
+    host: approval.host,
+    status: isExpiredRequest(approval) ? ("expired" as const) : approval.status,
+    // Only while it's waiting for an answer: that's when it's checked
+    screen:
+      approval.status === "pending" && !isExpiredRequest(approval)
+        ? approvalScreen(approval.id)
+        : null,
+    login: approval.itemId ? getVaultItem(approval.itemId) : null,
+  }
+}
+
+export async function decideLogin(approvalId: string, choice: LoginChoice) {
+  try {
+    const answer = answerLogin(approvalId, choice)
+    const { closeApprovalNotice } = await import("@/lib/remote/core")
+    const outcome = {
+      approved: "Approved",
+      declined: "Declined",
+      "taken-over": "You're signing in yourself",
+      provided: "Done",
+    }[answer.marker.action]
+    await closeApprovalNotice(approvalId, `${outcome} · ${answer.marker.summary}`)
     return { ok: true as const, ...answer, marker: signMarker(answer.marker) }
   } catch (error) {
     return { ok: false as const, error: reason(error) }

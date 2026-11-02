@@ -235,17 +235,21 @@ export const vaultItems = sqliteTable(
   (t) => [index("vault_items_kind_idx").on(t.kind)]
 )
 
-// A payment an agent asked to make, and what the person decided
+// A payment or a sign-in an agent asked to make, and what the person decided
 export const vaultApprovals = sqliteTable(
   "vault_approvals",
   {
     id: id(),
+    kind: text({ enum: ["payment", "login"] })
+      .notNull()
+      .default("payment"),
     threadId: text()
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
     // The agent that asked, whose desktop has the checkout open
     agentId: text().references(() => agents.id, { onDelete: "cascade" }),
-    // The saved card or UPI ID the person chose
+    // The saved card or UPI ID the person chose; for a sign-in, the login
+    // the agent asked to use
     itemId: text().references(() => vaultItems.id, { onDelete: "cascade" }),
     merchant: text().notNull(),
     amount: text().notNull(),
@@ -253,7 +257,7 @@ export const vaultApprovals = sqliteTable(
     // The site the checkout was on when the agent asked; payment details only
     // fill there
     host: text(),
-    // Payment fields already typed under this approval; each fills once
+    // Fields already typed under this approval; each fills once
     filled: text({ mode: "json" }).$type<string[]>(),
     status: text({ enum: ["pending", "approved", "declined", "taken-over"] })
       .notNull()

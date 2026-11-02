@@ -23,7 +23,12 @@ import {
   type Approval,
   type VaultItemView,
 } from "@/lib/vault"
-import { answerPayment, answerSecret, type VaultMarker } from "@/lib/vault-requests"
+import {
+  answerLogin,
+  answerPayment,
+  answerSecret,
+  type VaultMarker,
+} from "@/lib/vault-requests"
 import { getTakeoverLink } from "@/lib/workstation"
 
 /* ────────────────────────────────────────────────────────────────────
@@ -298,8 +303,8 @@ export async function onButton(
   press: { chat: string; userId: string; data: string; message?: Sent }
 ): Promise<string | null> {
   if (press.userId !== ownerOf(channel.id)) return "Private"
-  const pay = press.data.match(/^pay:([\w-]+):([\w-]+)$/)
-  if (pay) return handlePayment(channel, press, pay[1], pay[2])
+  const decision = press.data.match(/^(pay|login):([\w-]+):([\w-]+)$/)
+  if (decision) return handleApproval(channel, press, decision[2], decision[3])
   const use = press.data.match(/^use:(a|s):(.+)$/)
   if (!use) return null
   const [, kind, id] = use
@@ -480,6 +485,7 @@ const TOOL_LABELS: Record<string, (input: Record<string, unknown>) => string> = 
     `filling ${String(i.field ?? "a field").replace(/_/g, " ")} from your vault`,
   request_payment_approval: (i) =>
     `asking you to approve ${String(i.amount ?? "a payment")}`,
+  request_login_approval: () => "asking you to approve a sign-in",
   request_secret: () => "asking you for a detail",
   delegate: () => "delegating",
 }
@@ -648,6 +654,7 @@ async function converse(
       if (
         (part.type === "tool-request_takeover" ||
           part.type === "tool-request_payment_approval" ||
+          part.type === "tool-request_login_approval" ||
           part.type === "tool-request_secret") &&
         part.state === "output-available"
       ) {
@@ -802,13 +809,16 @@ export async function notifyFinished({
 
 /* ───────────────────────── payments & secrets ───────────────────── */
 
-// Messages asking for a payment decision, so a decision made elsewhere can
-// take their buttons away
-const paymentNotices = ((
+// Messages asking for a payment or sign-in decision, so a decision made
+// elsewhere can take their buttons away
+const approvalNotices = ((
   globalThis as {
-    __xirynPaymentNotices?: Map<string, { channel: ChannelId; message: Sent }[]>
+    __xirynApprovalNotices?: Map<string, { channel: ChannelId; message: Sent }[]>
   }
-).__xirynPaymentNotices ??= new Map())
+).__xirynApprovalNotices ??= new Map())
+
+const approvalIcon = (approval: Approval | null) =>
+  approval?.kind === "login" ? "🔑" : "💳"
 
 // An agent wants to pay: the person approves with a saved method, pays
 // themselves, or declines, with one tap
@@ -872,51 +882,116 @@ export async function notifyPayment({
     const message = await channel.send(chat, text, { buttons })
     if (message) sent.push({ channel: channel.id, message })
   }
-  if (sent.length) paymentNotices.set(approval.id, sent)
+  if (sent.length) approvalNotices.set(approval.id, sent)
 }
 
-export async function closePaymentNotice(approvalId: string, outcome: string) {
-  const notices = paymentNotices.get(approvalId)
+// An agent wants to sign in with a saved login: the person approves, signs
+// in themselves, or declines
+export async function notifyLogin({
+  agent,
+  squadId,
+  approval,
+  login,
+}: {
+  agent: Agent
+  squadId: string | null
+  approval: Approval
+  login: VaultItemView
+}) {
+  const text = [
+    `🔑 **${agent.name} wants to sign in**`,
+    "",
+    `to \`${approval.host}\` with ${login.hint}`,
+    "",
+    "Check the screenshot shows the sign-in page you expect. Nothing is typed until you approve.",
+  ].join("\n")
+  const buttons: Button[][] = [
+    [{ label: "✓ Approve sign-in", data: `login:${approval.id}:approve` }],
+    [
+      { label: "🖐 I'll sign in myself", data: `login:${approval.id}:takeover` },
+      { label: "✕ Decline", data: `login:${approval.id}:decline` },
+    ],
+  ]
+  const screen = approvalScreen(approval.id)
+
+  const sent: { channel: ChannelId; message: Sent }[] = []
+  for (const { channel, chat } of paired()) {
+    setTarget(
+      channel.id,
+      squadId
+        ? { squadId, threadId: approval.threadId }
+        : { agentId: agent.id, threadId: approval.threadId }
+    )
+    if (screen) {
+      await channel
+        .photo(
+          chat,
+          { base64: screen, mediaType: "image/jpeg" },
+          `${agent.name}'s screen at sign-in`
+        )
+        .catch((error) => reportError(`${channel.id} photo`, error))
+    }
+    const message = await channel.send(chat, text, { buttons })
+    if (message) sent.push({ channel: channel.id, message })
+  }
+  if (sent.length) approvalNotices.set(approval.id, sent)
+}
+
+export async function closeApprovalNotice(approvalId: string, outcome: string) {
+  const notices = approvalNotices.get(approvalId)
   if (!notices) return
-  paymentNotices.delete(approvalId)
+  approvalNotices.delete(approvalId)
+  const icon = approvalIcon(getApproval(approvalId))
   for (const notice of notices) {
     await channels
       .get(notice.channel)
-      ?.edit(notice.message, `💳 **${outcome}** · decided in Xiryn`)
+      ?.edit(notice.message, `${icon} **${outcome}** · decided in Xiryn`)
       .catch(() => {})
   }
 }
 
-async function handlePayment(
+// A payment or sign-in decided with a button
+async function handleApproval(
   channel: Channel,
   press: { chat: string; message?: Sent },
   approvalId: string,
   choice: string
 ) {
+  const approval = getApproval(approvalId)
+  const login = approval?.kind === "login"
   let outcome: ReturnType<typeof answerPayment>
   try {
-    outcome = answerPayment(
-      approvalId,
-      choice === "takeover"
-        ? "takeover"
-        : choice === "decline"
-          ? "decline"
-          : { itemId: choice }
-    )
+    outcome = login
+      ? answerLogin(
+          approvalId,
+          choice === "takeover"
+            ? "takeover"
+            : choice === "decline"
+              ? "decline"
+              : "approve"
+        )
+      : answerPayment(
+          approvalId,
+          choice === "takeover"
+            ? "takeover"
+            : choice === "decline"
+              ? "decline"
+              : { itemId: choice }
+        )
   } catch (error) {
     return (error instanceof Error ? error.message : String(error)).slice(0, 190)
   }
-  const approval = getApproval(approvalId)!
   const decided =
     outcome.marker.action === "approved"
       ? `✅ Approved · ${outcome.marker.summary}`
       : outcome.marker.action === "declined"
         ? `✕ Declined · ${outcome.marker.summary}`
-        : `🖐 You're paying · ${outcome.marker.summary}`
+        : `🖐 You're ${login ? "signing in" : "paying"} · ${outcome.marker.summary}`
+  const icon = approvalIcon(approval)
 
   // This message, and the same request on other channels, lose their buttons
-  const others = paymentNotices.get(approvalId) ?? []
-  paymentNotices.delete(approvalId)
+  const others = approvalNotices.get(approvalId) ?? []
+  approvalNotices.delete(approvalId)
   for (const notice of others) {
     if (
       press.message &&
@@ -926,24 +1001,24 @@ async function handlePayment(
       continue
     await channels
       .get(notice.channel)
-      ?.edit(notice.message, `💳 **${decided}** · decided on ${channel.name}`)
+      ?.edit(notice.message, `${icon} **${decided}** · decided on ${channel.name}`)
       .catch(() => {})
   }
   if (press.message)
-    await channel.edit(press.message, `💳 **${decided}**`).catch(() => {})
+    await channel.edit(press.message, `${icon} **${decided}**`).catch(() => {})
 
   const owner = db
     .select({ agentId: threads.agentId, squadId: threads.squadId })
     .from(threads)
-    .where(eq(threads.id, approval.threadId))
+    .where(eq(threads.id, approval!.threadId))
     .get()
-  const agentId = approval.agentId ?? owner?.agentId
+  const agentId = approval!.agentId ?? owner?.agentId
   if (!owner || !agentId) return decided
   setTarget(
     channel.id,
     owner.squadId
-      ? { squadId: owner.squadId, threadId: approval.threadId }
-      : { agentId, threadId: approval.threadId }
+      ? { squadId: owner.squadId, threadId: approval!.threadId }
+      : { agentId, threadId: approval!.threadId }
   )
   if (outcome.text) {
     void converse(channel, press.chat, outcome.text, outcome.marker).catch((error) =>
@@ -951,14 +1026,16 @@ async function handlePayment(
     )
     return decided
   }
-  // Paying themselves: hand over the desktop with the checkout on it
+  // Doing it themselves: hand over the desktop with the page on it
   const agent = db.select().from(agents).where(eq(agents.id, agentId)).get()
   if (agent) {
     await notifyTakeover({
       agent: agent as Agent,
-      threadId: approval.threadId,
+      threadId: approval!.threadId,
       squadId: owner.squadId,
-      reason: `You chose to pay ${approval.amount} to ${approval.merchant} yourself. The checkout is open on ${agent.name}'s desktop.`,
+      reason: login
+        ? `You chose to sign in to ${approval!.host} yourself. The sign-in page is open on ${agent.name}'s desktop.`
+        : `You chose to pay ${approval!.amount} to ${approval!.merchant} yourself. The checkout is open on ${agent.name}'s desktop.`,
     })
   }
   return decided

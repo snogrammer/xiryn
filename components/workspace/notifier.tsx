@@ -107,9 +107,11 @@ function describe(event: Exclude<XirynEvent, { type: "turn-started" }>) {
     const status =
       event.type === "payment"
         ? "wants to pay"
-        : event.type === "secret"
-          ? "needs a detail"
-          : "needs you"
+        : event.type === "login"
+          ? "wants to sign in"
+          : event.type === "secret"
+            ? "needs a detail"
+            : "needs you"
     return {
       kind: "attention" as Kind,
       status,

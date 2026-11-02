@@ -30,9 +30,9 @@ export type XirynEvent =
       durationMs: number
     })
   | (Common & {
-      // The agent handed over its screen, wants a payment approved, or
-      // needs a detail only the person has
-      type: "takeover" | "payment" | "secret"
+      // The agent handed over its screen, wants a payment or a sign-in
+      // approved, or needs a detail only the person has
+      type: "takeover" | "payment" | "login" | "secret"
       reason: string
     })
 
@@ -65,6 +65,8 @@ function desktopNotice(event: XirynEvent) {
       return notifyDesktop(`${event.name} needs you at the screen`, event.reason)
     case "payment":
       return notifyDesktop(`${event.name} wants to make a payment`, event.reason)
+    case "login":
+      return notifyDesktop(`${event.name} wants to sign in`, event.reason)
     case "secret":
       return notifyDesktop(`${event.name} needs a detail from you`, event.reason)
   }

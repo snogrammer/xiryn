@@ -11,7 +11,13 @@ import {
   XIcon,
 } from "lucide-react"
 
-import { decidePayment, paymentRequest, provideSecret } from "@/actions/vault"
+import {
+  decideLogin,
+  decidePayment,
+  loginRequest,
+  paymentRequest,
+  provideSecret,
+} from "@/actions/vault"
 import { useTakeover } from "@/components/thread/takeover"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -20,6 +26,7 @@ import type { VaultKind } from "@/lib/vault"
 import { cn } from "@/lib/utils"
 
 type Payment = NonNullable<Awaited<ReturnType<typeof paymentRequest>>>
+type Login = NonNullable<Awaited<ReturnType<typeof loginRequest>>>
 
 function Shell({
   icon,
@@ -271,6 +278,144 @@ export function PaymentApprovalCard({
               </Button>
             </div>
           )}
+        </>
+      )}
+
+      {!decided && !awaiting && (
+        <p className="text-[12px] text-muted-foreground">
+          No longer waiting for an answer.
+        </p>
+      )}
+    </Shell>
+  )
+}
+
+/* ─────────────────────────── sign-in ─────────────────────────── */
+
+// An agent wants to sign in with a saved login. Nothing is typed until the
+// person approves.
+export function LoginApprovalCard({
+  approvalId,
+  awaiting,
+}: {
+  approvalId: string
+  // The latest thing in the thread, so it can still be answered
+  awaiting: boolean
+}) {
+  const { send, start, available } = useTakeover()
+  const [login, setLogin] = React.useState<Login | null | undefined>(undefined)
+  const [busy, setBusy] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async () => {
+    setLogin(await loginRequest(approvalId))
+  }, [approvalId])
+
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load()
+  }, [load])
+
+  if (login === undefined) {
+    return (
+      <Shell icon={<KeyRoundIcon className="size-3.5" />} kicker="sign-in request">
+        <Spinner className="size-4" />
+      </Shell>
+    )
+  }
+  if (login === null) return null
+
+  const decide = async (choice: "approve" | "takeover" | "decline") => {
+    setBusy(choice)
+    setError(null)
+    const result = await decideLogin(login.id, choice)
+    setBusy(null)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    await load()
+    if (result.text) send(result.text, result.marker)
+    if (choice === "takeover") start()
+  }
+
+  const decided = login.status !== "pending"
+  const open = !decided && awaiting
+
+  return (
+    <Shell
+      icon={<KeyRoundIcon className="size-3.5" />}
+      kicker={
+        login.status === "approved"
+          ? "sign-in approved"
+          : login.status === "declined"
+            ? "sign-in declined"
+            : login.status === "taken-over"
+              ? "you're signing in yourself"
+              : login.status === "expired"
+                ? "sign-in request expired"
+                : open
+                  ? "wants to sign in · nothing is typed until you approve"
+                  : "sign-in request"
+      }
+      tone={login.status === "approved" ? "done" : open ? "attention" : "muted"}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-mono text-[12.5px]">
+          {login.login?.hint ?? "A saved login"}
+        </span>
+        <span className="rounded-sm border px-1.5 py-px font-mono text-[10.5px] text-muted-foreground">
+          {login.host ?? "site unknown"}
+        </span>
+      </div>
+
+      {open && login.screen && (
+        <figure className="flex flex-col gap-1.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`data:image/jpeg;base64,${login.screen}`}
+            alt="The agent's screen when it asked to sign in"
+            className="w-full max-w-md rounded-md border bg-black"
+          />
+          <figcaption className="label-mono text-muted-foreground">
+            its screen when it asked · check this is the sign-in page you expect
+          </figcaption>
+        </figure>
+      )}
+
+      {open && (
+        <>
+          {error && <p className="text-[12px] text-destructive">{error}</p>}
+          <div className="flex flex-wrap items-center gap-2 border-t border-dashed pt-3">
+            <Button size="sm" disabled={!!busy} onClick={() => decide("approve")}>
+              {busy === "approve" ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <CheckIcon data-icon="inline-start" />
+              )}
+              Approve — let it sign in
+            </Button>
+            {available && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!!busy}
+                onClick={() => decide("takeover")}
+              >
+                <HandIcon data-icon="inline-start" />
+                I&apos;ll sign in myself
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!!busy}
+              onClick={() => decide("decline")}
+            >
+              <XIcon data-icon="inline-start" />
+              Decline
+            </Button>
+          </div>
         </>
       )}
 
